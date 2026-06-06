@@ -1,11 +1,9 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  AlertCircle,
   ArrowLeft,
   BarChart3,
   CalendarCheck,
-  Check,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
@@ -14,25 +12,35 @@ import {
   ClipboardList,
   Crown,
   Droplet,
+  Droplets,
   Edit3,
+  Flower2,
   GitMerge,
+  HelpCircle,
   Home,
   Layers,
   Link2,
+  Moon,
   PackageCheck,
   Play,
   Plus,
   Quote,
+  Camera,
+  Heart,
+  Check,
   Send,
+  Settings,
+  Bookmark,
   Share2,
+  Smile,
+  Sun,
   Download,
   Sparkles,
   Star,
-  Trophy,
   Upload,
   User,
   Volume2,
-  X,
+  Zap,
 } from 'lucide-react';
 import './styles.css';
 
@@ -114,35 +122,16 @@ const planSteps = [
   },
 ];
 
-const consensusPoints = [
-  '都强调「温和清洁」，避免过度去油破坏皮肤屏障',
-  '洁面后第一时间补水，能明显提升后续成分吸收',
-  '保湿锁水是每天必做的收尾步骤，不能省略',
-];
-
-const conflictPoints = [
-  {
-    topic: '精华使用频率',
-    views: [
-      ['油痘肌研究所', '建议每天使用烟酰胺精华改善暗沉'],
-      ['皮肤科医生说', '敏感期应先修护屏障，减少功效型精华'],
-    ],
-    ai: 'AI 取舍：先低频建立耐受，敏感期暂停，皮肤稳定后再逐步增加到每天。',
-  },
-  {
-    topic: '是否需要喷雾补水',
-    views: [
-      ['成分党 Lyla', '喷雾意义不大，不如直接用化妆水'],
-      ['皮肤科医生说', '泛红、敏感时温泉喷雾能即时舒缓'],
-    ],
-    ai: 'AI 取舍：泛红或敏感时使用舒缓，状态稳定的日常可以省略。',
-  },
-];
-
 const cases = [
-  ['油皮痘肌的', '护肤搭配', '23.5w人看过', 'case-1'],
-  ['敏感肌修复', '全攻略', '18.7w人看过', 'case-2'],
-  ['抗老紧致', '护肤方案', '12.3w人看过', 'case-3'],
+  { title: '屏障修护方案', steps: 4, price: 198, periods: ['day', 'night'], seed: 'case-1' },
+  { title: '敏感肌修护方案', steps: 5, price: 268, periods: ['day', 'night'], seed: 'case-2' },
+  { title: '抗老紧致方案', steps: 6, price: 398, periods: ['night'], seed: 'case-3' },
+];
+
+const skinMetrics = [
+  { key: 'oil', label: '油脂', value: 62, status: '偏高', Icon: Droplet },
+  { key: 'dry', label: '干燥', value: 21, status: '偏低', Icon: Droplets },
+  { key: 'sensitive', label: '敏感', value: 17, status: '健康', Icon: Flower2 },
 ];
 
 const rankingUsers = [
@@ -222,36 +211,12 @@ function ProductImage({ tone }) {
   );
 }
 
-function HomePage({ goCompare, goPlan }) {
+function HomePage({ goPlan, goSkinTest }) {
   const [draft, setDraft] = useState('');
-  const [links, setLinks] = useState([]);
-  const [multi, setMulti] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showPref, setShowPref] = useState(false);
-  const [pref, setPref] = useState('');
-  const addLink = () => {
-    if (links.length >= 3) return;
-    const value = draft.trim() || `https://www.douyin.com/video/skincare-${links.length + 1}`;
-    setLinks([...links, value]);
-    setDraft('');
-  };
-  const removeLink = i => setLinks(links.filter((_, idx) => idx !== i));
-  const submitSingle = () => {
+  const submit = () => {
     setLoading(true);
     setTimeout(() => { setLoading(false); goPlan(); }, 700);
-  };
-  const startMerge = preference => {
-    setShowPref(false);
-    setLoading(true);
-    setTimeout(() => { setLoading(false); goCompare(preference); }, 800);
-  };
-  const toggleMulti = () => {
-    const next = !multi;
-    setMulti(next);
-    if (next && draft.trim() && links.length === 0) {
-      setLinks([draft.trim()]);
-      setDraft('');
-    }
   };
   return (
     <main className="page home-page">
@@ -259,8 +224,13 @@ function HomePage({ goCompare, goPlan }) {
       <section className="hero-row">
         <div className="hero-text">
           <div className="brand-pill"><Sparkles size={14} /> 你的护肤小助手</div>
-          <h1 className="brand-name"><img src="/brand-fuji.svg" alt="肤记" /><Sparkles className="brand-spark" size={22} strokeWidth={2.4} /></h1>
-          <div className="brand-tagline">抖音护肤计划助手</div>
+          <div className="brand-block">
+            <h1 className="brand-name">
+              <img src="/brand-fuji.svg" alt="肤记" />
+              <Sparkles className="brand-spark" size={16} strokeWidth={2.4} />
+            </h1>
+            <div className="brand-tagline">抖音护肤计划助手</div>
+          </div>
           <p className="hero-headline">把抖音护肤视频<br />变成每日护理方案</p>
         </div>
         <div className="girl-hero" aria-label="护肤小助手形象">
@@ -273,153 +243,192 @@ function HomePage({ goCompare, goPlan }) {
           <span className="import-icon"><Link2 size={22} strokeWidth={2.2} /></span>
           <div>
             <h2>导入抖音护肤视频</h2>
-            <p>{multi ? '添加多条同主题视频，AI 对照后合并' : '提取步骤、产品与价格，并标注时间轴'}</p>
+            <p>提取步骤、产品与价格</p>
           </div>
         </div>
-
-        <button className={`mode-switch ${multi ? 'on' : ''}`} onClick={toggleMulti} type="button">
-          <span className="ms-label"><Layers size={16} strokeWidth={2.2} /> 多个视频一起整理</span>
-          <span className="ms-track"><span className="ms-thumb" /></span>
-        </button>
-
-        {multi && links.length > 0 && (
-          <div className="link-list">
-            {links.map((l, i) => (
-              <div className="link-chip" key={i}>
-                <span className="link-chip-icon"><Play size={12} fill="currentColor" strokeWidth={0} /></span>
-                <span className="link-chip-text">{l}</span>
-                <button onClick={() => removeLink(i)} aria-label="移除链接"><X size={15} /></button>
-              </div>
-            ))}
-          </div>
-        )}
 
         <div className="input-wrap">
           <Link2 size={20} className="input-lead" />
           <input
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && multi && addLink()}
-            placeholder={multi ? '粘贴视频链接后点 + 添加' : '粘贴抖音视频链接'}
+            onKeyDown={e => e.key === 'Enter' && submit()}
+            placeholder="粘贴抖音视频链接"
           />
-          {multi && <button className="add-link" onClick={addLink} disabled={links.length >= 3} aria-label="添加链接"><Plus size={20} strokeWidth={2.6} /></button>}
         </div>
 
-        {multi ? (
-          <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={() => setShowPref(true)} disabled={links.length === 0 || loading}>
-            <span>{loading ? '正在整理' : `对照 ${links.length || ''} 条视频整理`}</span>
-            {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
-          </button>
-        ) : (
-          <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={submitSingle}>
-            <span>{loading ? '正在整理' : '开始整理'}</span>
-            {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
-          </button>
-        )}
+        <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={submit}>
+          <span>{loading ? '正在整理' : '开始整理'}</span>
+          {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
+        </button>
       </section>
 
-      <p className="case-tip">不知道链接？ 试试<span onClick={goPlan}>我们的案例</span><ChevronRight size={15} /></p>
+      <section className="card skintest-cta" onClick={goSkinTest}>
+        <span className="skintest-cta-icon"><Camera size={24} strokeWidth={2.2} /></span>
+        <div className="skintest-cta-text">
+          <h3>还没有链接？</h3>
+          <p>拍照测肤，帮你找到合适的视频</p>
+        </div>
+        <button className="skintest-cta-btn" onClick={goSkinTest}>开始测肤 <ChevronRight size={15} strokeWidth={2.6} /></button>
+      </section>
 
       <section className="section-title">
-        <h2>热门案例</h2>
+        <h2>精选案例</h2>
         <button>查看全部 <ChevronRight size={16} /></button>
       </section>
       <div className="case-grid">
-        {cases.map(([a, b, views, seed]) => (
-          <article className="case-card" key={seed} onClick={goPlan}>
-            <div className={`case-img ${seed}`} />
-            <h3>{a}<br />{b}</h3>
-            <p><span className="tiny-people">◉◉</span> {views}</p>
+        {cases.map(c => (
+          <article className="case-card" key={c.seed} onClick={goPlan}>
+            <div className={`case-img ${c.seed}`} />
+            <h3>{c.title}</h3>
+            <p className="case-meta">来自抖音视频 · {c.steps}步护理</p>
+            <div className="case-foot">
+              <span className="case-price">¥{c.price}</span>
+              <span className="case-periods">
+                {c.periods.includes('day') && <Sun size={13} strokeWidth={2.2} />}
+                {c.periods.includes('night') && <Moon size={13} strokeWidth={2.2} />}
+              </span>
+            </div>
           </article>
         ))}
       </div>
-
-      {showPref && (
-        <div className="sheet-mask" onClick={() => setShowPref(false)}>
-          <div className="pref-sheet" onClick={e => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <h3>你有特别的偏好吗？</h3>
-            <p>告诉 AI 你更看重哪条视频的哪个点，合并时会优先考虑。</p>
-            <textarea
-              value={pref}
-              onChange={e => setPref(e.target.value)}
-              placeholder="例如：更认同「皮肤科医生说」的屏障修护建议，精华可以先不用"
-            />
-            <button className="primary-btn pref-confirm" onClick={() => startMerge(pref.trim())}>
-              <Sparkles size={18} strokeWidth={2.2} /> 按我的需求整理
-            </button>
-            <button className="pref-skip" onClick={() => startMerge('')}>没有需求，直接整理</button>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
 
-function ComparePage({ goHome, goPlan, preference }) {
+function SkinTestPage({ goHome, goPlan }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [flash, setFlash] = useState(false);
+  const [facingMode, setFacingMode] = useState('user');
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [toast, setToast] = useState('');
+  const showToast = text => {
+    setToast(text);
+    setTimeout(() => setToast(''), 1600);
+  };
+  const stopStream = () => {
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+  };
+  const startCamera = async facing => {
+    stopStream();
+    setCameraReady(false);
+    setCameraError('');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('当前浏览器不支持摄像头');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: facing,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        await video.play();
+      }
+      setCameraReady(true);
+    } catch (err) {
+      const msg = err.name === 'NotAllowedError'
+        ? '请允许浏览器使用摄像头权限'
+        : err.name === 'NotFoundError'
+          ? '未检测到可用摄像头'
+          : err.message || '无法打开摄像头';
+      setCameraError(msg);
+      showToast(msg);
+    }
+  };
+  useEffect(() => {
+    startCamera(facingMode);
+    return stopStream;
+  }, [facingMode]);
+  const toggleCamera = () => {
+    setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
+    showToast('已切换摄像头');
+  };
   return (
-    <main className="page compare-page">
+    <main className="page skintest-page">
       <StatusBar />
-      <Header title="对照分析" onBack={goHome} />
+      <header className="skintest-header">
+        <button className="st-logo" onClick={goHome}>肤记<Sparkles size={11} className="brand-spark-sm" /></button>
+        <h1>拍照测肤</h1>
+        <button className="st-help" onClick={() => showToast('请将脸部移入圆框，保持光线充足')}>
+          <HelpCircle size={15} strokeWidth={2.2} /> 测肤说明
+        </button>
+      </header>
 
-      <section className="compare-intro">
-        <span className="compare-intro-icon"><Layers size={22} strokeWidth={2.2} /></span>
-        <div>
-          <h2>已解析 {sourceVideos.length} 条视频</h2>
-          <p>AI 提取每条视频的关键建议，对照共识与分歧后合并为一份方案</p>
-        </div>
-      </section>
+      <section className="camera-card">
+        <button
+          className={`cam-ctrl ${flash ? 'on' : ''}`}
+          onClick={() => {
+            setFlash(!flash);
+            showToast('网页端暂不支持闪光灯');
+          }}
+        >
+          <Zap size={18} strokeWidth={2.2} fill={flash ? 'currentColor' : 'none'} />
+          <em>闪光灯</em>
+        </button>
+        <div className="cam-status"><i />{cameraReady ? '实时分析中' : '准备中'}</div>
+        <button className="cam-ctrl" onClick={toggleCamera}>
+          <Camera size={18} strokeWidth={2.2} />
+          <em>切换摄像头</em>
+        </button>
 
-      {preference && (
-        <div className="pref-banner">
-          <span className="pref-banner-icon"><Sparkles size={15} strokeWidth={2.2} /></span>
-          <div>
-            <b>已按你的需求整理</b>
-            <p>{preference}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="video-source-list">
-        {sourceVideos.map(v => (
-          <div className="video-source-card" key={v.id}>
-            <span className={`vs-thumb ${v.seed}`}><Play size={16} fill="#fff" strokeWidth={0} /></span>
-            <div className="vs-info">
-              <b>{v.author}</b>
-              <p>{v.handle} · {v.duration}</p>
+        <div className="cam-feed">
+          <video
+            ref={videoRef}
+            className={`cam-video ${facingMode === 'user' ? 'mirror' : ''} ${cameraReady ? 'ready' : ''}`}
+            playsInline
+            muted
+            autoPlay
+          />
+          {!cameraReady && !cameraError && <div className="cam-overlay cam-loading">正在启动摄像头…</div>}
+          {cameraError && (
+            <div className="cam-overlay cam-error">
+              <p>{cameraError}</p>
+              <button type="button" onClick={() => startCamera(facingMode)}>重试</button>
             </div>
-            <span className="vs-tips">提取 {v.tips} 条</span>
-          </div>
-        ))}
-      </div>
+          )}
+          <div className="face-frame" />
+          <span className="cam-hint">
+            {cameraReady ? '请将脸部移入圆框' : cameraError ? '请检查权限后重试' : '正在请求摄像头权限'}
+          </span>
+        </div>
 
-      <section className="card consensus-card">
-        <h3><span className="cmp-badge ok"><Check size={15} strokeWidth={3} /></span>多数共识 · {consensusPoints.length}</h3>
-        <ul>
-          {consensusPoints.map((p, i) => <li key={i}>{p}</li>)}
-        </ul>
+        <div className="metrics-card">
+          {skinMetrics.map(m => (
+            <div className="metric" key={m.key}>
+              <span className="metric-head"><m.Icon size={15} strokeWidth={2.2} />{m.label}</span>
+              <strong className="metric-value">{m.value}<small>%</small></strong>
+              <span className="metric-bar"><i style={{ width: `${m.value}%` }} /></span>
+              <em className="metric-status">{m.status}</em>
+            </div>
+          ))}
+        </div>
       </section>
 
-      <section className="card conflict-card">
-        <h3><span className="cmp-badge warn"><AlertCircle size={15} strokeWidth={2.6} /></span>分歧与 AI 取舍 · {conflictPoints.length}</h3>
-        {conflictPoints.map((c, i) => (
-          <div className="conflict-item" key={i}>
-            <h4>{c.topic}</h4>
-            {c.views.map(([who, view], j) => (
-              <div className="view-row" key={j}>
-                <span className="who">{who}</span>
-                <p>{view}</p>
-              </div>
-            ))}
-            <div className="ai-verdict"><Sparkles size={14} strokeWidth={2.2} /><span>{c.ai}</span></div>
-          </div>
-        ))}
+      <section className="card judge-card">
+        <span className="judge-icon"><Smile size={24} strokeWidth={2.2} /></span>
+        <div className="judge-text">
+          <b>当前判断：混油肌</b>
+          <p>T区油脂分泌较旺盛，两颊轻微缺水</p>
+        </div>
+        <button className="judge-detail" onClick={() => showToast('混油肌：T区偏油、两颊偏干，护理需分区')}>
+          查看详情 <ChevronRight size={14} strokeWidth={2.6} />
+        </button>
       </section>
 
-      <button className="primary-btn merge-btn" onClick={goPlan}>
-        <GitMerge size={18} strokeWidth={2.4} />
-        <span>查看合并后的护肤方案</span>
-      </button>
+      <p className="reco-note"><Heart size={14} fill="#f6a6bc" strokeWidth={0} /> 确认后为你推荐合适的抖音护肤视频</p>
+
+      <button className="primary-btn confirm-skin" onClick={goPlan}>确认结果，推荐视频</button>
+      {toast && <div className="toast">{toast}</div>}
     </main>
   );
 }
@@ -536,41 +545,149 @@ function PlanDetailPage({ goEdit, goHome, single = false }) {
   );
 }
 
+const editQuickChips = [
+  ['减少精华', Layers],
+  ['增加保湿', Droplets],
+  ['更换洁面', PackageCheck],
+  ['更温和一些', Flower2],
+];
+
+let editMsgId = 0;
+const nextEditMsgId = () => ++editMsgId;
+
+const editInitialMessages = [
+  {
+    id: nextEditMsgId(),
+    type: 'ai',
+    text: '你好！我是肤记小助手，告诉我你想怎么调整当前方案吧～',
+    time: '10:28',
+  },
+];
+
+const editAdjustKeywords = ['精华', '保湿', '洁面', '温和', '减少', '增加', '更换', '调整'];
+
+function isAdjustRequest(text) {
+  return editAdjustKeywords.some(kw => text.includes(kw));
+}
+
 function EditPlanPage({ goPlan }) {
-  const [messages, setMessages] = useState([
-    ['user', '我想减少精华的使用，帮我调整一下方案'],
-    ['ai', '好的，我为您调整了方案，减少精华步骤，增加基础保湿。已为您生成新的方案二。'],
-  ]);
+  const [messages, setMessages] = useState(editInitialMessages);
   const [input, setInput] = useState('');
+  const chatRef = useRef(null);
+  const scrollToBottom = () => {
+    requestAnimationFrame(() => {
+      if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    });
+  };
+  useEffect(scrollToBottom, [messages]);
   const send = (text = input) => {
     if (!text.trim()) return;
-    setMessages([...messages, ['user', text], ['ai', '收到，我会继续帮你优化步骤、产品和预算，保持温和有效。']]);
+    const now = new Date();
+    const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const trimmed = text.trim();
+    const isAdjust = isAdjustRequest(trimmed);
+    const userMsg = { id: nextEditMsgId(), type: 'user', text: trimmed, time };
+    const aiMsg = {
+      id: nextEditMsgId(),
+      type: 'ai',
+      text: isAdjust
+        ? '好的，已为你调整：精华改为每周 3 次使用，保湿步骤升级加强，洁面替换为更温和的氨基酸泡沫。新方案已生成 👇'
+        : '收到～你可以告诉我具体想调整哪一步，比如减少精华、加强保湿或更换洁面。',
+      time,
+    };
+    setMessages(prev => {
+      const next = [...prev, userMsg, aiMsg];
+      if (isAdjust) {
+        next.push({ id: nextEditMsgId(), type: 'plan', steps: 2, price: 756 });
+      }
+      return next;
+    });
     setInput('');
   };
   return (
     <main className="page edit-page">
       <StatusBar />
       <Header title="修改方案" onBack={goPlan} />
-      <p className="sub-title">正在使用：方案一</p>
-      <section className="chat-list">
-        {messages.map(([role, text], idx) => (
-          <div key={idx} className={`bubble ${role}`}>{text}</div>
-        ))}
-        <span className="time">10:30</span>
-      </section>
-      <section className="card updated-card">
-        <h2>方案二（已更新）</h2>
-        <p>已调整 2 个步骤</p>
-        <h3>总价预估：¥756</h3>
-        <button onClick={goPlan}>查看新方案</button>
-      </section>
-      <div className="chips">
-        {['减少精华', '增加保湿', '更换洁面'].map(t => <button key={t} onClick={() => send(t)}>{t}</button>)}
+
+      <div className="edit-assistant">
+        <div className="edit-assistant-avatar">
+          <img src="/skincare-mascot.svg" alt="肤记小助手" />
+        </div>
+        <div className="edit-assistant-text">
+          <p className="edit-assistant-name">
+            <span className="edit-online-dot" />
+            肤记小助手在线
+          </p>
+          <p className="edit-assistant-hint">正在帮你微调方案</p>
+        </div>
       </div>
-      <div className="chat-input">
-        <input value={input} onChange={e => setInput(e.target.value)} placeholder="输入您的需求..." />
-        <button onClick={() => send()}><Send size={20} /></button>
-      </div>
+
+      <section className="edit-chat" ref={chatRef}>
+        {messages.map(msg => {
+          if (msg.type === 'plan') {
+            return (
+              <div className="edit-plan-card" key={msg.id}>
+                <span className="edit-plan-icon"><ClipboardList size={22} strokeWidth={2.2} /></span>
+                <div className="edit-plan-body">
+                  <b>方案二（已更新）</b>
+                  <p>已调整 {msg.steps} 个步骤</p>
+                  <em>总价预估：¥{msg.price}</em>
+                </div>
+                <button className="edit-plan-btn" onClick={goPlan}>
+                  查看新方案 <ChevronRight size={15} strokeWidth={2.6} />
+                </button>
+              </div>
+            );
+          }
+          if (msg.type === 'user') {
+            return (
+              <div className="edit-msg user" key={msg.id}>
+                <div className="edit-msg-content">
+                  <p>{msg.text}</p>
+                  <span className="edit-msg-meta">
+                    {msg.time}
+                    <Check size={13} strokeWidth={2.8} />
+                  </span>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div className="edit-msg ai" key={msg.id}>
+              <div className="edit-msg-avatar">
+                <img src="/skincare-mascot.svg" alt="" />
+              </div>
+              <div className="edit-msg-content">
+                <p>{msg.text}</p>
+                <span className="edit-msg-meta">{msg.time}</span>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
+      <footer className="edit-footer">
+        <div className="edit-chips">
+          {editQuickChips.map(([label, Icon]) => (
+            <button key={label} onClick={() => send(label)}>
+              <Icon size={14} strokeWidth={2.2} />
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="edit-input-bar">
+          <Smile size={22} strokeWidth={1.8} className="edit-input-emoji" />
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && send()}
+            placeholder="告诉肤记你想怎么调整..."
+          />
+          <button className="edit-send-btn" onClick={() => send()} aria-label="发送">
+            <Send size={18} strokeWidth={2.4} />
+          </button>
+        </div>
+      </footer>
     </main>
   );
 }
@@ -691,16 +808,55 @@ function RankingPage() {
   );
 }
 
-function ProfilePage() {
+function ProfilePage({ goPlan, goRecord }) {
+  const stats = [
+    ['15', '坚持天数'],
+    ['5', '我的方案'],
+    ['3', '已收藏'],
+  ];
+  const menu = [
+    ['我的方案', '已生成 5 套护肤方案', ClipboardList, goPlan],
+    ['我的收藏', '收藏了 3 套方案', Bookmark, goPlan],
+    ['打卡记录', '连续打卡 15 天', CalendarCheck, goRecord],
+    ['肤质档案', '混油肌 · 上次更新 6/5', Droplet, null],
+    ['设置', '通知、隐私与账号', Settings, null],
+  ];
   return (
-    <main className="page profile-page">
+    <main className="page profile-page warm-page">
       <StatusBar />
-      <h1 className="big-title">我的</h1>
-      <section className="card profile-card">
-        <Avatar seed="me" size={64} />
-        <div><h2>我自己</h2><p>坚持护肤 15 天 · 已收藏 3 套方案</p></div>
+      <header className="brand-header">肤记<Sparkles size={12} className="brand-spark-sm" /></header>
+
+      <section className="profile-hero">
+        <div className="profile-id">
+          <div className="profile-avatar-wrap">
+            <Avatar seed="me" size={68} />
+            <span className="profile-edit"><Edit3 size={12} strokeWidth={2.4} /></span>
+          </div>
+          <div className="profile-id-text">
+            <h1>我自己 <em className="vip-tag"><Crown size={11} fill="#fff" strokeWidth={0} /> VIP</em></h1>
+            <p>护肤第 <b>15</b> 天，状态稳步变好</p>
+          </div>
+        </div>
+        <MascotHero className="profile-mascot" />
       </section>
-      {['我的方案', '我的收藏', '打卡记录', '肤质档案', '设置'].map(item => <section key={item} className="card list-card">{item}<ChevronRight size={18} /></section>)}
+
+      <section className="profile-stats">
+        {stats.map(([num, label]) => (
+          <div key={label}><strong>{num}</strong><span>{label}</span></div>
+        ))}
+      </section>
+
+      <section className="profile-menu">
+        {menu.map(([title, desc, Icon, onClick]) => (
+          <button className="menu-row" key={title} onClick={onClick || undefined}>
+            <span className="menu-icon"><Icon size={19} strokeWidth={2.2} /></span>
+            <div className="menu-text"><b>{title}</b><p>{desc}</p></div>
+            <ChevronRight size={18} className="menu-arrow" />
+          </button>
+        ))}
+      </section>
+
+      <p className="rank-footer">坚持护肤，遇见更好的自己 ♥</p>
     </main>
   );
 }
@@ -711,8 +867,6 @@ function Header({ title, onBack }) {
 
 function App() {
   const [screen, setScreen] = useState('home');
-  const [planSingle, setPlanSingle] = useState(true);
-  const [preference, setPreference] = useState('');
   const currentTab = useMemo(() => {
     if (screen === 'checkin' || screen === 'record') return 'checkin';
     if (screen === 'ranking') return 'ranking';
@@ -720,21 +874,19 @@ function App() {
     return 'home';
   }, [screen]);
   const setTab = tab => setScreen(tab);
-  const goCompare = pref => { setPreference(pref || ''); setScreen('compare'); };
-  const goPlanSingle = () => { setPlanSingle(true); setScreen('plan'); };
-  const goPlanMerged = () => { setPlanSingle(false); setScreen('plan'); };
+  const goPlan = () => setScreen('plan');
   return (
     <div className="app-shell">
       <div className="phone">
-        {screen === 'home' && <HomePage goCompare={goCompare} goPlan={goPlanSingle} />}
-        {screen === 'compare' && <ComparePage goHome={() => setScreen('home')} goPlan={goPlanMerged} preference={preference} />}
-        {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} single={planSingle} />}
+        {screen === 'home' && <HomePage goPlan={goPlan} goSkinTest={() => setScreen('skintest')} />}
+        {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goPlan={goPlan} />}
+        {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} single />}
         {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
         {screen === 'checkin' && <CheckinPage goRecord={() => setScreen('record')} />}
         {screen === 'record' && <CheckinRecordPage goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
         {screen === 'ranking' && <RankingPage />}
-        {screen === 'profile' && <ProfilePage />}
-        {screen !== 'edit' && screen !== 'record' && screen !== 'compare' && <BottomNav tab={currentTab} setTab={setTab} />}
+        {screen === 'profile' && <ProfilePage goPlan={goPlan} goRecord={() => setScreen('record')} />}
+        {screen !== 'edit' && screen !== 'record' && <BottomNav tab={currentTab} setTab={setTab} />}
       </div>
     </div>
   );
