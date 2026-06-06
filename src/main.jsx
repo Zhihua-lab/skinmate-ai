@@ -90,6 +90,7 @@ const planSteps = [
     ingredients: ['植物提取物', '烟酰胺', '泛醇'],
     usage: '晚间使用 2-3 滴，避开眼周，轻按至吸收。',
     sources: [
+      { v: 0, time: '02:30', quote: '想改善暗沉可以加一支温和精华，但一定要避开高浓度刺激。' },
       { v: 1, time: '03:20', quote: '烟酰胺能改善暗沉，但要从低浓度开始建立耐受。' },
     ],
   },
@@ -106,6 +107,7 @@ const planSteps = [
     ingredients: ['泛醇 B5', '积雪草苷', '乳木果油'],
     usage: '护肤最后一步薄涂，干燥区域可局部加量。',
     sources: [
+      { v: 0, time: '02:55', quote: '最后用面霜把水分锁住，油皮选清爽质地就好。' },
       { v: 1, time: '04:55', quote: '最后一步一定要锁水，B5 修复霜适合屏障受损的皮肤。' },
       { v: 2, time: '03:40', quote: '乳木果油这类成分对干痒很友好，干燥区域可以多涂一点。' },
     ],
@@ -223,7 +225,10 @@ function ProductImage({ tone }) {
 function HomePage({ goCompare, goPlan }) {
   const [draft, setDraft] = useState('');
   const [links, setLinks] = useState([]);
+  const [multi, setMulti] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPref, setShowPref] = useState(false);
+  const [pref, setPref] = useState('');
   const addLink = () => {
     if (links.length >= 3) return;
     const value = draft.trim() || `https://www.douyin.com/video/skincare-${links.length + 1}`;
@@ -231,9 +236,22 @@ function HomePage({ goCompare, goPlan }) {
     setDraft('');
   };
   const removeLink = i => setLinks(links.filter((_, idx) => idx !== i));
-  const submit = () => {
+  const submitSingle = () => {
     setLoading(true);
-    setTimeout(() => { setLoading(false); goCompare(); }, 700);
+    setTimeout(() => { setLoading(false); goPlan(); }, 700);
+  };
+  const startMerge = preference => {
+    setShowPref(false);
+    setLoading(true);
+    setTimeout(() => { setLoading(false); goCompare(preference); }, 800);
+  };
+  const toggleMulti = () => {
+    const next = !multi;
+    setMulti(next);
+    if (next && draft.trim() && links.length === 0) {
+      setLinks([draft.trim()]);
+      setDraft('');
+    }
   };
   return (
     <main className="page home-page">
@@ -241,7 +259,7 @@ function HomePage({ goCompare, goPlan }) {
       <section className="hero-row">
         <div className="hero-text">
           <div className="brand-pill"><Sparkles size={14} /> 你的护肤小助手</div>
-          <h1 className="brand-name">肤记<Sparkles className="brand-spark" size={22} strokeWidth={2.4} /></h1>
+          <h1 className="brand-name"><img src="/brand-fuji.svg" alt="肤记" /><Sparkles className="brand-spark" size={22} strokeWidth={2.4} /></h1>
           <div className="brand-tagline">抖音护肤计划助手</div>
           <p className="hero-headline">把抖音护肤视频<br />变成每日护理方案</p>
         </div>
@@ -255,10 +273,16 @@ function HomePage({ goCompare, goPlan }) {
           <span className="import-icon"><Link2 size={22} strokeWidth={2.2} /></span>
           <div>
             <h2>导入抖音护肤视频</h2>
-            <p>可添加多条同主题视频，AI 对照后合并方案</p>
+            <p>{multi ? '添加多条同主题视频，AI 对照后合并' : '提取步骤、产品与价格，并标注时间轴'}</p>
           </div>
         </div>
-        {links.length > 0 && (
+
+        <button className={`mode-switch ${multi ? 'on' : ''}`} onClick={toggleMulti} type="button">
+          <span className="ms-label"><Layers size={16} strokeWidth={2.2} /> 多个视频一起整理</span>
+          <span className="ms-track"><span className="ms-thumb" /></span>
+        </button>
+
+        {multi && links.length > 0 && (
           <div className="link-list">
             {links.map((l, i) => (
               <div className="link-chip" key={i}>
@@ -269,23 +293,32 @@ function HomePage({ goCompare, goPlan }) {
             ))}
           </div>
         )}
+
         <div className="input-wrap">
           <Link2 size={20} className="input-lead" />
           <input
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addLink()}
-            placeholder="粘贴抖音视频链接"
+            onKeyDown={e => e.key === 'Enter' && multi && addLink()}
+            placeholder={multi ? '粘贴视频链接后点 + 添加' : '粘贴抖音视频链接'}
           />
-          <button className="add-link" onClick={addLink} disabled={links.length >= 3} aria-label="添加链接"><Plus size={20} strokeWidth={2.6} /></button>
+          {multi && <button className="add-link" onClick={addLink} disabled={links.length >= 3} aria-label="添加链接"><Plus size={20} strokeWidth={2.6} /></button>}
         </div>
-        <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={submit}>
-          <span>{loading ? '正在解析视频' : links.length > 1 ? `对照 ${links.length} 条视频整理` : '开始整理'}</span>
-          {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
-        </button>
+
+        {multi ? (
+          <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={() => setShowPref(true)} disabled={links.length === 0 || loading}>
+            <span>{loading ? '正在整理' : `对照 ${links.length || ''} 条视频整理`}</span>
+            {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
+          </button>
+        ) : (
+          <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={submitSingle}>
+            <span>{loading ? '正在整理' : '开始整理'}</span>
+            {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
+          </button>
+        )}
       </section>
 
-      <p className="case-tip">不知道链接？ 试试<span onClick={goCompare}>我们的案例</span><ChevronRight size={15} /></p>
+      <p className="case-tip">不知道链接？ 试试<span onClick={goPlan}>我们的案例</span><ChevronRight size={15} /></p>
 
       <section className="section-title">
         <h2>热门案例</h2>
@@ -300,11 +333,30 @@ function HomePage({ goCompare, goPlan }) {
           </article>
         ))}
       </div>
+
+      {showPref && (
+        <div className="sheet-mask" onClick={() => setShowPref(false)}>
+          <div className="pref-sheet" onClick={e => e.stopPropagation()}>
+            <div className="sheet-handle" />
+            <h3>你有特别的偏好吗？</h3>
+            <p>告诉 AI 你更看重哪条视频的哪个点，合并时会优先考虑。</p>
+            <textarea
+              value={pref}
+              onChange={e => setPref(e.target.value)}
+              placeholder="例如：更认同「皮肤科医生说」的屏障修护建议，精华可以先不用"
+            />
+            <button className="primary-btn pref-confirm" onClick={() => startMerge(pref.trim())}>
+              <Sparkles size={18} strokeWidth={2.2} /> 按我的需求整理
+            </button>
+            <button className="pref-skip" onClick={() => startMerge('')}>没有需求，直接整理</button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
-function ComparePage({ goHome, goPlan }) {
+function ComparePage({ goHome, goPlan, preference }) {
   return (
     <main className="page compare-page">
       <StatusBar />
@@ -317,6 +369,16 @@ function ComparePage({ goHome, goPlan }) {
           <p>AI 提取每条视频的关键建议，对照共识与分歧后合并为一份方案</p>
         </div>
       </section>
+
+      {preference && (
+        <div className="pref-banner">
+          <span className="pref-banner-icon"><Sparkles size={15} strokeWidth={2.2} /></span>
+          <div>
+            <b>已按你的需求整理</b>
+            <p>{preference}</p>
+          </div>
+        </div>
+      )}
 
       <div className="video-source-list">
         {sourceVideos.map(v => (
@@ -362,11 +424,11 @@ function ComparePage({ goHome, goPlan }) {
   );
 }
 
-function PlanDetailPage({ goEdit, goHome }) {
+function PlanDetailPage({ goEdit, goHome, single = false }) {
   const [step, setStep] = useState(1);
   const [fav, setFav] = useState(false);
   const [toast, setToast] = useState('');
-  const [openSrc, setOpenSrc] = useState(null);
+  const [openSrc, setOpenSrc] = useState(single ? 1 : null);
   const scrollerRef = useRef(null);
   const showToast = text => {
     setToast(text);
@@ -395,6 +457,11 @@ function PlanDetailPage({ goEdit, goHome }) {
     <main className="page plan-page">
       <StatusBar />
       <Header title="方案详情" onBack={goHome} />
+      <div className="plan-source-tag">
+        {single
+          ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自 {sourceVideos[0].author} 的视频 · 已标注时间轴</>
+          : <><GitMerge size={14} strokeWidth={2.4} /> 由 {sourceVideos.length} 条视频对照合并 · 可溯源</>}
+      </div>
       <div className="stepper">
         {planSteps.map((s, i) => <button key={s.id} onClick={() => scrollToStep(i + 1)} className={step === i + 1 ? 'active' : ''}>{i + 1}</button>)}
       </div>
@@ -406,6 +473,7 @@ function PlanDetailPage({ goEdit, goHome }) {
             ['成分亮点', s.ingredients.join('、')],
             ['使用方法', s.usage],
           ];
+          const sources = single ? s.sources.filter(src => src.v === 0) : s.sources;
           return (
             <section className="card plan-card step-slide" key={s.id}>
               <p className="purple-label">{s.label}</p>
@@ -427,21 +495,22 @@ function PlanDetailPage({ goEdit, goHome }) {
                   </div>
                 ))}
               </div>
-              {s.sources && s.sources.length > 0 && (
+              {sources.length > 0 && (
                 <div className="source-block">
                   <button className="source-toggle" onClick={() => setOpenSrc(openSrc === s.id ? null : s.id)}>
-                    <span><Quote size={14} strokeWidth={2.4} /> 内容溯源 · {s.sources.length} 处</span>
+                    <span><Quote size={14} strokeWidth={2.4} /> {single ? '视频时间轴' : '内容溯源'} · {sources.length} 处</span>
                     <ChevronDown size={18} className={openSrc === s.id ? 'rot' : ''} />
                   </button>
                   {openSrc === s.id && (
-                    <div className="source-items">
-                      {s.sources.map((src, i) => (
-                        <div className="source-item" key={i}>
-                          <div className="source-meta">
-                            <span className="src-play"><Play size={11} fill="currentColor" strokeWidth={0} /></span>
-                            {sourceVideos[src.v].author} · {src.time}
+                    <div className="source-timeline">
+                      {sources.map((src, i) => (
+                        <div className="tl-item" key={i}>
+                          <span className="tl-time">{src.time}</span>
+                          <span className="tl-node" />
+                          <div className="tl-body">
+                            {!single && <span className="tl-author">{sourceVideos[src.v].author}</span>}
+                            <p>“{src.quote}”</p>
                           </div>
-                          <p>“{src.quote}”</p>
                         </div>
                       ))}
                     </div>
@@ -642,6 +711,8 @@ function Header({ title, onBack }) {
 
 function App() {
   const [screen, setScreen] = useState('home');
+  const [planSingle, setPlanSingle] = useState(true);
+  const [preference, setPreference] = useState('');
   const currentTab = useMemo(() => {
     if (screen === 'checkin' || screen === 'record') return 'checkin';
     if (screen === 'ranking') return 'ranking';
@@ -649,12 +720,15 @@ function App() {
     return 'home';
   }, [screen]);
   const setTab = tab => setScreen(tab);
+  const goCompare = pref => { setPreference(pref || ''); setScreen('compare'); };
+  const goPlanSingle = () => { setPlanSingle(true); setScreen('plan'); };
+  const goPlanMerged = () => { setPlanSingle(false); setScreen('plan'); };
   return (
     <div className="app-shell">
       <div className="phone">
-        {screen === 'home' && <HomePage goCompare={() => setScreen('compare')} goPlan={() => setScreen('plan')} />}
-        {screen === 'compare' && <ComparePage goHome={() => setScreen('home')} goPlan={() => setScreen('plan')} />}
-        {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} />}
+        {screen === 'home' && <HomePage goCompare={goCompare} goPlan={goPlanSingle} />}
+        {screen === 'compare' && <ComparePage goHome={() => setScreen('home')} goPlan={goPlanMerged} preference={preference} />}
+        {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} single={planSingle} />}
         {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
         {screen === 'checkin' && <CheckinPage goRecord={() => setScreen('record')} />}
         {screen === 'record' && <CheckinRecordPage goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
