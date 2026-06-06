@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowLeft,
@@ -10,6 +10,8 @@ import {
   ChevronRight,
   ChevronUp,
   ClipboardList,
+  Crown,
+  Droplet,
   Edit3,
   Home,
   Link2,
@@ -143,9 +145,9 @@ function ResultActionBar({ onCard, onSave }) {
   );
 }
 
-function MascotHero() {
+function MascotHero({ className = '' }) {
   return (
-    <div className="mascot-hero" aria-label="护肤小助手形象">
+    <div className={`mascot-hero ${className}`} aria-label="护肤小助手形象">
       <div className="mascot-glow"></div>
       <img src="/skincare-mascot.svg" alt="护肤小助手" />
     </div>
@@ -223,49 +225,75 @@ function PlanDetailPage({ goEdit, goHome }) {
   const [step, setStep] = useState(1);
   const [fav, setFav] = useState(false);
   const [toast, setToast] = useState('');
+  const scrollerRef = useRef(null);
   const showToast = text => {
     setToast(text);
     setTimeout(() => setToast(''), 1400);
   };
-  const current = planSteps.find(s => s.id === step);
-  const rows = [
-    ['主要功效', current.benefits.join(' / ')],
-    ['成分亮点', current.ingredients.join('、')],
-    ['使用方法', current.usage],
-  ];
+  const scrollToStep = i => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const child = el.children[i - 1];
+    if (child) el.scrollTo({ left: child.offsetLeft, behavior: 'smooth' });
+    setStep(i);
+  };
+  const handleScroll = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const center = el.scrollLeft + el.clientWidth / 2;
+    let idx = 0;
+    let best = Infinity;
+    [...el.children].forEach((c, i) => {
+      const dist = Math.abs(c.offsetLeft + c.offsetWidth / 2 - center);
+      if (dist < best) { best = dist; idx = i; }
+    });
+    if (idx + 1 !== step) setStep(idx + 1);
+  };
   return (
     <main className="page plan-page">
       <StatusBar />
       <Header title="方案详情" onBack={goHome} />
       <div className="stepper">
-        {[1, 2, 3, 4].map(i => <button key={i} onClick={() => setStep(i)} className={step === i ? 'active' : ''}>{i}</button>)}
+        {planSteps.map((s, i) => <button key={s.id} onClick={() => scrollToStep(i + 1)} className={step === i + 1 ? 'active' : ''}>{i + 1}</button>)}
       </div>
 
-      <section className="card plan-card">
-        <p className="purple-label">{current.label}</p>
-        <h1>{current.title}</h1>
-        <p className="desc">{current.description}</p>
-        <div className="divider" />
-        <div className="product-row">
-          <ProductImage tone={current.tone} />
-          <div>
-            <h3>{current.product}</h3>
-            <p><b>¥{current.price}</b> <span>/ {current.volume}</span></p>
-          </div>
-        </div>
-        <div className="info-list">
-          {rows.map(([title, content]) => (
-            <div className="info-item" key={title}>
-              <h4>{title}</h4>
-              <p>{content}</p>
-            </div>
-          ))}
-        </div>
-        <div className="action-row">
-          <button className={`ghost-btn ${fav ? 'favorited' : ''}`} onClick={() => setFav(!fav)}><Star size={24} />{fav ? '已收藏' : '收藏'}</button>
-          <button className="primary-btn" onClick={goEdit}>修改方案</button>
-        </div>
-      </section>
+      <div className="step-scroller" ref={scrollerRef} onScroll={handleScroll}>
+        {planSteps.map(s => {
+          const rows = [
+            ['主要功效', s.benefits.join(' / ')],
+            ['成分亮点', s.ingredients.join('、')],
+            ['使用方法', s.usage],
+          ];
+          return (
+            <section className="card plan-card step-slide" key={s.id}>
+              <p className="purple-label">{s.label}</p>
+              <h1>{s.title}</h1>
+              <p className="desc">{s.description}</p>
+              <div className="divider" />
+              <div className="product-row">
+                <ProductImage tone={s.tone} />
+                <div>
+                  <h3>{s.product}</h3>
+                  <p><b>¥{s.price}</b> <span>/ {s.volume}</span></p>
+                </div>
+              </div>
+              <div className="info-list">
+                {rows.map(([title, content]) => (
+                  <div className="info-item" key={title}>
+                    <h4>{title}</h4>
+                    <p>{content}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="action-row">
+                <button className={`ghost-btn ${fav ? 'favorited' : ''}`} onClick={() => setFav(!fav)}><Star size={24} />{fav ? '已收藏' : '收藏'}</button>
+                <button className="primary-btn" onClick={goEdit}>修改方案</button>
+              </div>
+            </section>
+          );
+        })}
+      </div>
+      <div className="swipe-hint">← 左右滑动查看 {planSteps.length} 个步骤 →</div>
       <section className="card total-card">
         <span>总价预估：<b>¥882</b></span>
         <button>收起明细 <ChevronUp size={18} /></button>
@@ -316,35 +344,53 @@ function EditPlanPage({ goPlan }) {
 }
 
 function CheckinPage({ goRecord }) {
-  const marked = [1, 2, 3, 4, 5, 6, 16, 17, 18, 19];
+  const marked = [3, 7, 16, 19];
+  const today = 17;
   return (
     <main className="page checkin-page green-page">
       <StatusBar />
-      <h1 className="big-title">今日打卡</h1>
-      <p className="big-sub">坚持护肤，见证更好的自己 ✨</p>
-      <section className="card check-summary">
-        <div><h3>已坚持打卡</h3><strong>15 <span>天</span></strong><p>连续打卡 7 天</p></div>
-        <button className="primary-btn" onClick={goRecord}>打卡记录</button>
+      <div className="checkin-hero">
+        <div className="hero-text">
+          <div className="brand-pill"><CalendarCheck size={14} /> 每日护肤打卡</div>
+          <h1 className="big-title">今日打卡</h1>
+          <p className="big-sub">坚持护肤<br />见证更好的自己 ✨</p>
+        </div>
+        <MascotHero className="sm" />
+      </div>
+
+      <section className="card upload-card">
+        <h3>今日状态</h3>
+        <p>上传今天的皮肤状态，记录每一天的变化</p>
+        <button className="upload-zone">
+          <span className="upload-icon"><Upload size={22} strokeWidth={2.2} /></span>
+          <b>上传照片</b>
+          <em>点击拍照或从相册选择</em>
+        </button>
       </section>
+
+      <section className="card check-summary">
+        <div className="summary-text">
+          <h3>坚持护肤</h3>
+          <strong>15 <span>天</span></strong>
+          <p>已连续记录 7 天</p>
+        </div>
+        <button className="record-btn" onClick={goRecord}>查看记录 <ChevronRight size={16} /></button>
+      </section>
+
       <section className="card calendar-card">
         <div className="cal-head"><ChevronLeft /><h2>2024年6月</h2><ChevronRight /></div>
         <div className="weekdays">{'日一二三四五六'.split('').map(d => <span key={d}>{d}</span>)}</div>
         <div className="days">
-          {Array.from({ length: 35 }, (_, idx) => idx).map(idx => {
-            const day = idx === 0 ? '' : idx;
-            const isToday = idx === 6;
-            const isMarked = marked.includes(idx);
-            return <button key={idx} onClick={idx ? goRecord : undefined} className={`${isMarked ? 'marked' : ''} ${isToday ? 'today' : ''}`}>{isToday ? '今' : day}</button>;
-          })}
+          {Array.from({ length: 6 }, (_, i) => <span key={`e${i}`} />)}
+          {Array.from({ length: 30 }, (_, i) => i + 1).map(d => (
+            <button key={d} onClick={goRecord} className={`${marked.includes(d) ? 'marked' : ''} ${d === today ? 'today' : ''}`}>{d}</button>
+          ))}
         </div>
       </section>
-      <section className="card upload-card">
-        <h3>今日状态</h3><p>上传今天的皮肤状态</p>
-        <button><Upload size={20} /> 上传照片</button>
-      </section>
+
       <section className="tip-card">
-        <h3>💡 护肤小贴士</h3>
-        <p>充足的睡眠和防晒，是皮肤变好的秘密哦～</p>
+        <h3><Droplet size={16} fill="#f7a8bd" strokeWidth={0} /> 今日提醒</h3>
+        <p>最近状态不错，继续保持补水与防晒习惯。</p>
       </section>
     </main>
   );
@@ -379,24 +425,36 @@ function RankingPage() {
   return (
     <main className="page ranking-page warm-page">
       <StatusBar />
+      <header className="brand-header">肤记<Sparkles size={12} className="brand-spark-sm" /></header>
       <section className="ranking-hero">
-        <div><h1>打卡排行榜</h1><p>看看谁是您护肤的王者</p></div>
-        <div className="trophy-art"><Trophy size={88} /><Sparkles size={18} /></div>
+        <div className="hero-text">
+          <h1>打卡排行榜</h1>
+          <p>看看谁是您护肤的王者</p>
+        </div>
+        <div className="trophy-img"><img src="/trophy.png" alt="奖杯" /></div>
       </section>
       <div className="rank-tabs">{['总榜', '同方案榜', '好友榜'].map(t => <button key={t} onClick={() => setRankTab(t)} className={rankTab === t ? 'active' : ''}>{t}</button>)}</div>
       <section className="card ranking-list">
         {rankingUsers.map(([name, days, seed], idx) => (
           <div className="rank-row" key={name}>
-            <span className={`medal m${idx + 1}`}>{idx + 1}</span>
-            <Avatar seed={seed} size={44} />
+            <span className={`medal m${idx + 1} ${idx < 3 ? 'top' : ''}`}>
+              {idx === 0 && <Crown className="crown" size={14} fill="#f6b73c" strokeWidth={0} />}
+              {idx + 1}
+            </span>
+            <Avatar seed={seed} size={48} />
             <b>{name}</b>
             <p>坚持 <strong>{days}</strong> 天</p>
           </div>
         ))}
       </section>
-      <section className="card mine-rank">
-        <b>12</b><Avatar seed="me" size={48} /><h3>我自己</h3><p>坚持 <strong>15</strong> 天</p>
+      <p className="my-rank-label">我的排名</p>
+      <section className="card my-rank-card">
+        <span className="medal">12</span>
+        <Avatar seed="me" size={48} />
+        <b>我自己 <em className="me-tag">我</em></b>
+        <p>坚持 <strong>15</strong> 天</p>
       </section>
+      <p className="rank-footer">坚持护肤，遇见更好的自己 ♥</p>
     </main>
   );
 }
