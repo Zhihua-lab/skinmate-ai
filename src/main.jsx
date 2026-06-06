@@ -1,9 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  AlertCircle,
   ArrowLeft,
   BarChart3,
   CalendarCheck,
+  Check,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
@@ -13,9 +15,14 @@ import {
   Crown,
   Droplet,
   Edit3,
+  GitMerge,
   Home,
+  Layers,
   Link2,
   PackageCheck,
+  Play,
+  Plus,
+  Quote,
   Send,
   Share2,
   Download,
@@ -25,8 +32,15 @@ import {
   Upload,
   User,
   Volume2,
+  X,
 } from 'lucide-react';
 import './styles.css';
+
+const sourceVideos = [
+  { id: 'v1', author: '油痘肌研究所', handle: '@skin_lab', duration: '03:12', tips: 5, seed: 'rank-1' },
+  { id: 'v2', author: '成分党 Lyla', handle: '@lyla_skin', duration: '05:48', tips: 7, seed: 'rank-2' },
+  { id: 'v3', author: '皮肤科医生说', handle: '@derm_talk', duration: '04:30', tips: 6, seed: 'rank-3' },
+];
 
 const planSteps = [
   {
@@ -41,6 +55,10 @@ const planSteps = [
     benefits: ['温和清洁', '减少油脂堆积', '不紧绷'],
     ingredients: ['氨基酸表活', '神经酰胺', '弱酸性配方'],
     usage: '早晚各一次，取适量加水揉搓后轻柔按摩，再用清水洗净。',
+    sources: [
+      { v: 0, time: '00:42', quote: '油皮一定要用氨基酸洁面，早晚各一次就够，千万别过度清洁。' },
+      { v: 2, time: '01:10', quote: '清洁过度会破坏屏障，弱酸性、低刺激是底线。' },
+    ],
   },
   {
     id: 2,
@@ -54,6 +72,10 @@ const planSteps = [
     benefits: ['即时补水', '舒缓泛红', '提升服帖度'],
     ingredients: ['马齿苋提取物', '透明质酸钠', '温泉水'],
     usage: '洁面后距离面部 15cm 喷洒，轻拍吸收。',
+    sources: [
+      { v: 0, time: '01:50', quote: '洁面后立刻补水，趁皮肤微湿的时候吸收最好。' },
+      { v: 2, time: '02:05', quote: '泛红敏感时期，用温泉水喷雾能即时舒缓。' },
+    ],
   },
   {
     id: 3,
@@ -67,6 +89,9 @@ const planSteps = [
     benefits: ['舒缓修护', '改善暗沉', '稳定肌肤'],
     ingredients: ['植物提取物', '烟酰胺', '泛醇'],
     usage: '晚间使用 2-3 滴，避开眼周，轻按至吸收。',
+    sources: [
+      { v: 1, time: '03:20', quote: '烟酰胺能改善暗沉，但要从低浓度开始建立耐受。' },
+    ],
   },
   {
     id: 4,
@@ -80,6 +105,35 @@ const planSteps = [
     benefits: ['锁水保湿', '屏障修护', '减少干痒'],
     ingredients: ['泛醇 B5', '积雪草苷', '乳木果油'],
     usage: '护肤最后一步薄涂，干燥区域可局部加量。',
+    sources: [
+      { v: 1, time: '04:55', quote: '最后一步一定要锁水，B5 修复霜适合屏障受损的皮肤。' },
+      { v: 2, time: '03:40', quote: '乳木果油这类成分对干痒很友好，干燥区域可以多涂一点。' },
+    ],
+  },
+];
+
+const consensusPoints = [
+  '都强调「温和清洁」，避免过度去油破坏皮肤屏障',
+  '洁面后第一时间补水，能明显提升后续成分吸收',
+  '保湿锁水是每天必做的收尾步骤，不能省略',
+];
+
+const conflictPoints = [
+  {
+    topic: '精华使用频率',
+    views: [
+      ['油痘肌研究所', '建议每天使用烟酰胺精华改善暗沉'],
+      ['皮肤科医生说', '敏感期应先修护屏障，减少功效型精华'],
+    ],
+    ai: 'AI 取舍：先低频建立耐受，敏感期暂停，皮肤稳定后再逐步增加到每天。',
+  },
+  {
+    topic: '是否需要喷雾补水',
+    views: [
+      ['成分党 Lyla', '喷雾意义不大，不如直接用化妆水'],
+      ['皮肤科医生说', '泛红、敏感时温泉喷雾能即时舒缓'],
+    ],
+    ai: 'AI 取舍：泛红或敏感时使用舒缓，状态稳定的日常可以省略。',
   },
 ];
 
@@ -166,16 +220,20 @@ function ProductImage({ tone }) {
   );
 }
 
-function HomePage({ goPlan }) {
-  const [link, setLink] = useState('');
+function HomePage({ goCompare, goPlan }) {
+  const [draft, setDraft] = useState('');
+  const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const addLink = () => {
+    if (links.length >= 3) return;
+    const value = draft.trim() || `https://www.douyin.com/video/skincare-${links.length + 1}`;
+    setLinks([...links, value]);
+    setDraft('');
+  };
+  const removeLink = i => setLinks(links.filter((_, idx) => idx !== i));
   const submit = () => {
-    if (!link.trim()) {
-      setLink('https://www.douyin.com/video/skin-care-demo');
-      return;
-    }
     setLoading(true);
-    setTimeout(() => { setLoading(false); goPlan(); }, 650);
+    setTimeout(() => { setLoading(false); goCompare(); }, 700);
   };
   return (
     <main className="page home-page">
@@ -184,25 +242,50 @@ function HomePage({ goPlan }) {
         <div className="hero-text">
           <div className="brand-pill"><Sparkles size={14} /> 你的护肤小助手</div>
           <h1 className="brand-name">肤记<Sparkles className="brand-spark" size={22} strokeWidth={2.4} /></h1>
-          <div className="brand-tagline">AI 护肤计划助手</div>
-          <p>粘贴抖音视频链接<br />生成专属护肤方案</p>
+          <div className="brand-tagline">抖音护肤计划助手</div>
+          <p className="hero-headline">把抖音护肤视频<br />变成每日护理方案</p>
         </div>
-        <MascotHero />
+        <div className="girl-hero" aria-label="护肤小助手形象">
+          <img src="/skincare-girl.png" alt="护肤小助手" />
+        </div>
       </section>
 
-      <section className="card input-card">
-        <h2>粘贴抖音视频链接</h2>
+      <section className="card import-card">
+        <div className="import-head">
+          <span className="import-icon"><Link2 size={22} strokeWidth={2.2} /></span>
+          <div>
+            <h2>导入抖音护肤视频</h2>
+            <p>可添加多条同主题视频，AI 对照后合并方案</p>
+          </div>
+        </div>
+        {links.length > 0 && (
+          <div className="link-list">
+            {links.map((l, i) => (
+              <div className="link-chip" key={i}>
+                <span className="link-chip-icon"><Play size={12} fill="currentColor" strokeWidth={0} /></span>
+                <span className="link-chip-text">{l}</span>
+                <button onClick={() => removeLink(i)} aria-label="移除链接"><X size={15} /></button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="input-wrap">
           <Link2 size={20} className="input-lead" />
-          <input value={link} onChange={e => setLink(e.target.value)} placeholder="粘贴抖音视频链接…" />
+          <input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addLink()}
+            placeholder="粘贴抖音视频链接"
+          />
+          <button className="add-link" onClick={addLink} disabled={links.length >= 3} aria-label="添加链接"><Plus size={20} strokeWidth={2.6} /></button>
         </div>
         <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={submit}>
-          <Sparkles size={18} strokeWidth={2.2} />
-          <span>{loading ? '正在生成方案' : '生成我的护肤方案'}</span>
+          <span>{loading ? '正在解析视频' : links.length > 1 ? `对照 ${links.length} 条视频整理` : '开始整理'}</span>
+          {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
         </button>
       </section>
 
-      <p className="case-tip">不知道链接？ 试试<span onClick={goPlan}>我们的案例</span><ChevronRight size={15} /></p>
+      <p className="case-tip">不知道链接？ 试试<span onClick={goCompare}>我们的案例</span><ChevronRight size={15} /></p>
 
       <section className="section-title">
         <h2>热门案例</h2>
@@ -221,10 +304,69 @@ function HomePage({ goPlan }) {
   );
 }
 
+function ComparePage({ goHome, goPlan }) {
+  return (
+    <main className="page compare-page">
+      <StatusBar />
+      <Header title="对照分析" onBack={goHome} />
+
+      <section className="compare-intro">
+        <span className="compare-intro-icon"><Layers size={22} strokeWidth={2.2} /></span>
+        <div>
+          <h2>已解析 {sourceVideos.length} 条视频</h2>
+          <p>AI 提取每条视频的关键建议，对照共识与分歧后合并为一份方案</p>
+        </div>
+      </section>
+
+      <div className="video-source-list">
+        {sourceVideos.map(v => (
+          <div className="video-source-card" key={v.id}>
+            <span className={`vs-thumb ${v.seed}`}><Play size={16} fill="#fff" strokeWidth={0} /></span>
+            <div className="vs-info">
+              <b>{v.author}</b>
+              <p>{v.handle} · {v.duration}</p>
+            </div>
+            <span className="vs-tips">提取 {v.tips} 条</span>
+          </div>
+        ))}
+      </div>
+
+      <section className="card consensus-card">
+        <h3><span className="cmp-badge ok"><Check size={15} strokeWidth={3} /></span>多数共识 · {consensusPoints.length}</h3>
+        <ul>
+          {consensusPoints.map((p, i) => <li key={i}>{p}</li>)}
+        </ul>
+      </section>
+
+      <section className="card conflict-card">
+        <h3><span className="cmp-badge warn"><AlertCircle size={15} strokeWidth={2.6} /></span>分歧与 AI 取舍 · {conflictPoints.length}</h3>
+        {conflictPoints.map((c, i) => (
+          <div className="conflict-item" key={i}>
+            <h4>{c.topic}</h4>
+            {c.views.map(([who, view], j) => (
+              <div className="view-row" key={j}>
+                <span className="who">{who}</span>
+                <p>{view}</p>
+              </div>
+            ))}
+            <div className="ai-verdict"><Sparkles size={14} strokeWidth={2.2} /><span>{c.ai}</span></div>
+          </div>
+        ))}
+      </section>
+
+      <button className="primary-btn merge-btn" onClick={goPlan}>
+        <GitMerge size={18} strokeWidth={2.4} />
+        <span>查看合并后的护肤方案</span>
+      </button>
+    </main>
+  );
+}
+
 function PlanDetailPage({ goEdit, goHome }) {
   const [step, setStep] = useState(1);
   const [fav, setFav] = useState(false);
   const [toast, setToast] = useState('');
+  const [openSrc, setOpenSrc] = useState(null);
   const scrollerRef = useRef(null);
   const showToast = text => {
     setToast(text);
@@ -285,6 +427,27 @@ function PlanDetailPage({ goEdit, goHome }) {
                   </div>
                 ))}
               </div>
+              {s.sources && s.sources.length > 0 && (
+                <div className="source-block">
+                  <button className="source-toggle" onClick={() => setOpenSrc(openSrc === s.id ? null : s.id)}>
+                    <span><Quote size={14} strokeWidth={2.4} /> 内容溯源 · {s.sources.length} 处</span>
+                    <ChevronDown size={18} className={openSrc === s.id ? 'rot' : ''} />
+                  </button>
+                  {openSrc === s.id && (
+                    <div className="source-items">
+                      {s.sources.map((src, i) => (
+                        <div className="source-item" key={i}>
+                          <div className="source-meta">
+                            <span className="src-play"><Play size={11} fill="currentColor" strokeWidth={0} /></span>
+                            {sourceVideos[src.v].author} · {src.time}
+                          </div>
+                          <p>“{src.quote}”</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="action-row">
                 <button className={`ghost-btn ${fav ? 'favorited' : ''}`} onClick={() => setFav(!fav)}><Star size={24} />{fav ? '已收藏' : '收藏'}</button>
                 <button className="primary-btn" onClick={goEdit}>修改方案</button>
@@ -489,14 +652,15 @@ function App() {
   return (
     <div className="app-shell">
       <div className="phone">
-        {screen === 'home' && <HomePage goPlan={() => setScreen('plan')} />}
+        {screen === 'home' && <HomePage goCompare={() => setScreen('compare')} goPlan={() => setScreen('plan')} />}
+        {screen === 'compare' && <ComparePage goHome={() => setScreen('home')} goPlan={() => setScreen('plan')} />}
         {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} />}
         {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
         {screen === 'checkin' && <CheckinPage goRecord={() => setScreen('record')} />}
         {screen === 'record' && <CheckinRecordPage goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
         {screen === 'ranking' && <RankingPage />}
         {screen === 'profile' && <ProfilePage />}
-        {screen !== 'edit' && screen !== 'record' && <BottomNav tab={currentTab} setTab={setTab} />}
+        {screen !== 'edit' && screen !== 'record' && screen !== 'compare' && <BottomNav tab={currentTab} setTab={setTab} />}
       </div>
     </div>
   );
