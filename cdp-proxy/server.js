@@ -151,7 +151,15 @@ app.get("/new", requireAuth, async (req, res) => {
 
 app.post("/eval", requireAuth, async (req, res) => {
   const targetId = String(req.query.target || "").trim();
-  const script = String(req.body || "").trim();
+  const rawBody = req.body;
+  const script =
+    typeof rawBody === "string"
+      ? rawBody.trim()
+      : Buffer.isBuffer(rawBody)
+        ? rawBody.toString("utf8").trim()
+        : rawBody && typeof rawBody === "object" && typeof rawBody.script === "string"
+          ? rawBody.script.trim()
+          : "";
   if (!targetId) {
     res.status(400).json({ error: "target is required" });
     return;

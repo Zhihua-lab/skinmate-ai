@@ -340,7 +340,16 @@ def fetch_douyin_snapshot_with_cdp(
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
             try:
-                eval_response = client.post(f"{proxy_url}/eval?target={target_id}", headers=headers, data=script, timeout=30)
+                eval_headers = {
+                    **headers,
+                    "Content-Type": "text/plain; charset=utf-8",
+                }
+                eval_response = client.post(
+                    f"{proxy_url}/eval?target={target_id}",
+                    headers=eval_headers,
+                    data=script.encode("utf-8"),
+                    timeout=30,
+                )
                 eval_response.raise_for_status()
                 snapshot = parse_cdp_eval_response(eval_response.json())
             except requests.RequestException as exc:
