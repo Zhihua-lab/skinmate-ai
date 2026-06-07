@@ -43,10 +43,10 @@ async function getBrowser() {
 }
 
 async function closeTarget(targetId) {
-  const page = targets.get(targetId);
-  if (!page) return false;
+  const target = targets.get(targetId);
+  if (!target) return false;
   targets.delete(targetId);
-  await page.close().catch(() => {});
+  await target.page.close().catch(() => {});
   return true;
 }
 
@@ -77,8 +77,10 @@ app.get("/new", requireAuth, async (req, res) => {
     const page = await browser.newPage();
     page.setDefaultNavigationTimeout(PAGE_TIMEOUT_MS);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: PAGE_TIMEOUT_MS });
+    const cdpSession = await page.target().createCDPSession();
+    await cdpSession.send("Runtime.enable");
     const targetId = crypto.randomUUID();
-    targets.set(targetId, page);
+    targets.set(targetId, { page, cdpSession });
     res.json({ targetId });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -97,17 +99,24 @@ app.post("/eval", requireAuth, async (req, res) => {
     return;
   }
 
-  const page = targets.get(targetId);
-  if (!page) {
+  const target = targets.get(targetId);
+  if (!target) {
     res.status(404).json({ error: `Unknown target: ${targetId}` });
     return;
   }
 
   try {
-    const value = await page.evaluate((source) => {
-      return (0, eval)(source);
-    }, script);
-    res.json({ value });
+    const result = await target.cdpSession.send("Runtime.evaluate", {
+      expression: script,
+      awaitPromise: true,
+      returnByValue: true
+    });
+    if (result.exceptionDetails) {
+      const text = result.exceptionDetails.text || "Runtime.evaluate failed";
+      const description = result.exceptionDetails.exception?.description || "";
+      throw new Error(description ? `${text}: ${description}` : text);
+    }
+    res.json({ value: result.result?.value ?? null });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
