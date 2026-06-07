@@ -11,6 +11,8 @@ FACEPP_API_KEY_ENV = "FACEPP_API_KEY"
 FACEPP_API_SECRET_ENV = "FACEPP_API_SECRET"
 FACEPP_SKIN_ANALYZE_URL = "https://api-cn.faceplusplus.com/facepp/v1/skinanalyze"
 DOTENV_PATH = Path(__file__).with_name(".env")
+DEFAULT_FACEPP_API_KEY = "YtZVxYyA0WR0yK0PW6k5lG9pZxFQ_G_o"
+DEFAULT_FACEPP_API_SECRET = "Xb9WzcLSO02McFZBK_5Iq2MZUVMsSXjd"
 
 
 class FacePPError(RuntimeError):
@@ -79,8 +81,8 @@ def analyze_image(image_path: Path, *, session: requests.Session | None = None) 
 
 def _facepp_credentials() -> tuple[str, str]:
     dotenv = _read_dotenv(DOTENV_PATH)
-    api_key = os.environ.get(FACEPP_API_KEY_ENV) or dotenv.get(FACEPP_API_KEY_ENV, "")
-    api_secret = os.environ.get(FACEPP_API_SECRET_ENV) or dotenv.get(FACEPP_API_SECRET_ENV, "")
+    api_key = os.environ.get(FACEPP_API_KEY_ENV) or dotenv.get(FACEPP_API_KEY_ENV) or DEFAULT_FACEPP_API_KEY
+    api_secret = os.environ.get(FACEPP_API_SECRET_ENV) or dotenv.get(FACEPP_API_SECRET_ENV) or DEFAULT_FACEPP_API_SECRET
     if not api_key or not api_secret:
         raise RuntimeError(f"{FACEPP_API_KEY_ENV} and {FACEPP_API_SECRET_ENV} must be set")
     return api_key, api_secret

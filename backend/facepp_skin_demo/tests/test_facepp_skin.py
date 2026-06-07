@@ -105,6 +105,28 @@ class FacePPSkinTests(unittest.TestCase):
             {"api_key": "dotenv-api-key", "api_secret": "dotenv-api-secret"},
         )
 
+    def test_analyze_image_uses_default_credentials_when_no_env_or_dotenv_is_set(self):
+        from facepp_skin import DEFAULT_FACEPP_API_KEY, DEFAULT_FACEPP_API_SECRET, analyze_image
+
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {"request_id": "req-1", "result": {"skin_type": 1}}
+        session = Mock()
+        session.post.return_value = response
+
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path = Path(tmp) / "face.jpg"
+            write_test_jpeg(image_path)
+
+            with patch("facepp_skin.DOTENV_PATH", Path(tmp) / ".env", create=True):
+                with patch.dict("os.environ", {}, clear=True):
+                    analyze_image(image_path, session=session)
+
+        self.assertEqual(
+            session.post.call_args.kwargs["data"],
+            {"api_key": DEFAULT_FACEPP_API_KEY, "api_secret": DEFAULT_FACEPP_API_SECRET},
+        )
+
     def test_analyze_image_reencodes_upload_to_jpeg_even_when_extension_is_jpg(self):
         from PIL import Image
 
