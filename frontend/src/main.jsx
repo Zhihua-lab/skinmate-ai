@@ -1038,14 +1038,19 @@ function EditPlanPage({ goPlan }) {
 
 function CheckinPage({ goRecord, record, onSave, onReset }) {
   const fileInputRef = useRef(null);
+  const calendarSwipeRef = useRef(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [preview, setPreview] = useState(record?.photo || '');
   const [photoData, setPhotoData] = useState(record?.photo || '');
   const [note, setNote] = useState(record?.note || '');
   const todayDate = new Date();
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(todayDate.getFullYear(), todayDate.getMonth(), 1));
   const today = todayDate.getDate();
-  const daysInMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0).getDate();
-  const leadingDays = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1).getDay();
+  const visibleYear = visibleMonth.getFullYear();
+  const visibleMonthIndex = visibleMonth.getMonth();
+  const isCurrentMonth = visibleYear === todayDate.getFullYear() && visibleMonthIndex === todayDate.getMonth();
+  const daysInMonth = new Date(visibleYear, visibleMonthIndex + 1, 0).getDate();
+  const leadingDays = new Date(visibleYear, visibleMonthIndex, 1).getDay();
   const marked = [3, 7, 16, 19];
   const isComplete = Boolean(record);
   const streak = isComplete ? 8 : 7;
@@ -1087,6 +1092,24 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
       date: todayDate.toISOString(),
       aiAdvice,
     });
+  };
+
+  const changeMonth = offset => {
+    setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  };
+
+  const handleCalendarPointerDown = event => {
+    calendarSwipeRef.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const handleCalendarPointerUp = event => {
+    const start = calendarSwipeRef.current;
+    calendarSwipeRef.current = null;
+    if (!start) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) < 45 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    changeMonth(deltaX < 0 ? 1 : -1);
   };
 
   const reupload = () => {
@@ -1163,13 +1186,28 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
         <button className="record-btn" onClick={goRecord}>查看记录 <ChevronRight size={16} /></button>
       </section>
 
-      <section className="card calendar-card">
-        <div className="cal-head"><ChevronLeft /><h2>{todayDate.getFullYear()}年{todayDate.getMonth() + 1}月</h2><ChevronRight /></div>
+      <section
+        className="card calendar-card"
+        onPointerDown={handleCalendarPointerDown}
+        onPointerUp={handleCalendarPointerUp}
+        onPointerCancel={() => { calendarSwipeRef.current = null; }}
+      >
+        <div className="cal-head">
+          <button onClick={() => changeMonth(-1)} aria-label="上个月"><ChevronLeft /></button>
+          <h2>{visibleYear}年{visibleMonthIndex + 1}月</h2>
+          <button onClick={() => changeMonth(1)} aria-label="下个月"><ChevronRight /></button>
+        </div>
         <div className="weekdays">{'日一二三四五六'.split('').map(d => <span key={d}>{d}</span>)}</div>
         <div className="days">
           {Array.from({ length: leadingDays }, (_, i) => <span key={`e${i}`} />)}
           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
-            <button key={d} onClick={isComplete && d === today ? goRecord : undefined} className={`${marked.includes(d) || (isComplete && d === today) ? 'marked' : ''} ${d === today ? 'today' : ''}`}>{d}</button>
+            <button
+              key={d}
+              onClick={isCurrentMonth && isComplete && d === today ? goRecord : undefined}
+              className={`${isCurrentMonth && (marked.includes(d) || (isComplete && d === today)) ? 'marked' : ''} ${isCurrentMonth && d === today ? 'today' : ''}`}
+            >
+              {d}
+            </button>
           ))}
         </div>
       </section>
