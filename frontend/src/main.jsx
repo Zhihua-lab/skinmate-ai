@@ -46,8 +46,9 @@ import {
 } from 'lucide-react';
 import { CHECKIN_BUCKET, supabase } from './lib/supabase';
 import './styles.css';
-import { analyzeVideoUrl, buildPlanFromAnalysis, extractDouyinUrl } from './videoAnalysis';
+import { resolvePlanForDemo } from './demoSkincarePlan';
 import { revisePlan } from './planEditApi';
+import { analyzeVideoUrl, extractDouyinUrl } from './videoAnalysis';
 
 const LOCAL_CHECKIN_KEY = 'fuji-today-checkin';
 const PENDING_DOUYIN_LINK_KEY = 'pendingDouyinLink';
@@ -60,6 +61,21 @@ const parsingSteps = [
   '正在整理产品和使用顺序…',
   '正在匹配你的肤况建议…',
   '正在生成可执行方案…',
+];
+
+const SKIN_SCAN_PHASE_MS = 800;
+const skinScanPhases = [
+  '正在检测面部区域...',
+  '正在校准光照环境...',
+  '正在分析油脂与干燥状态...',
+  '正在识别敏感与泛红特征...',
+  '正在生成个性化问题...',
+];
+const skinScanTags = [
+  '面部区域识别完成',
+  '光照质量良好',
+  'T区油脂偏高',
+  '两颊轻微缺水',
 ];
 
 const skinTips = [
@@ -323,20 +339,6 @@ const planSteps = [
   },
 ];
 
-function generatePlanFromLink(sourceLink) {
-  return planSteps.map(step => ({
-    ...step,
-    sources: step.sources.map((source, index) => ({
-      ...source,
-      quote: index === 0
-        ? `根据你导入的视频内容，建议这一步：${step.title}。`
-        : source.quote,
-    })),
-    description: step.description,
-    product: step.product,
-  }));
-}
-
 function readSavedGeneratedPlan() {
   try {
     const saved = localStorage.getItem(GENERATED_PLAN_KEY);
@@ -431,10 +433,10 @@ function HomePage({ goPlan, goSkinTest, goParsing }) {
   const [error, setError] = useState('');
   const submit = () => {
     const text = draft.trim();
-    const douyinUrl = text ? extractDouyinUrl(text) : null;
-    if (!douyinUrl) {
+    if (!text) {
       setError('');
-      goPlan();
+      console.log('Using default skincare plan');
+      goPlan(null, { type: 'default' });
       return;
     }
 
@@ -654,13 +656,15 @@ function SkinCapturePage({ goBack, goQuestions }) {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const galleryInputRef = useRef(null);
-  const analyzeTimeoutRef = useRef(null);
   const cameraRequestRef = useRef(0);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
   const [analysisImage, setAnalysisImage] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [scanPhase, setScanPhase] = useState(0);
+  const [visibleTags, setVisibleTags] = useState(0);
+  const goQuestionsRef = useRef(goQuestions);
 
   const stopCamera = () => {
     if (!streamRef.current) return;
@@ -714,13 +718,42 @@ function SkinCapturePage({ goBack, goQuestions }) {
     return () => {
       cameraRequestRef.current += 1;
       stopCamera();
-      if (analyzeTimeoutRef.current) clearTimeout(analyzeTimeoutRef.current);
     };
   }, []);
 
   useEffect(() => () => {
     if (capturedImage?.startsWith('blob:')) URL.revokeObjectURL(capturedImage);
   }, [capturedImage]);
+
+  useEffect(() => {
+    goQuestionsRef.current = goQuestions;
+  }, [goQuestions]);
+
+  useEffect(() => {
+    if (!isAnalyzing) return undefined;
+
+    setScanPhase(0);
+    setVisibleTags(0);
+    const timers = [];
+
+    for (let i = 1; i < skinScanPhases.length; i += 1) {
+      timers.push(window.setTimeout(() => setScanPhase(i), i * SKIN_SCAN_PHASE_MS));
+    }
+
+    skinScanTags.forEach((_, index) => {
+      timers.push(window.setTimeout(
+        () => setVisibleTags(current => Math.max(current, index + 1)),
+        1000 + index * 850,
+      ));
+    });
+
+    timers.push(window.setTimeout(() => {
+      setIsAnalyzing(false);
+      goQuestionsRef.current();
+    }, skinScanPhases.length * SKIN_SCAN_PHASE_MS));
+
+    return () => timers.forEach(clearTimeout);
+  }, [isAnalyzing]);
 
   const handleTakePhoto = () => {
     const video = videoRef.current;
@@ -740,6 +773,9 @@ function SkinCapturePage({ goBack, goQuestions }) {
   };
 
   const handleRetake = () => {
+    setIsAnalyzing(false);
+    setScanPhase(0);
+    setVisibleTags(0);
     setCapturedImage(current => {
       if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
       return null;
@@ -778,21 +814,33 @@ function SkinCapturePage({ goBack, goQuestions }) {
   const handleAnalyze = () => {
     if (!capturedImage || isAnalyzing) return;
     setIsAnalyzing(true);
-    analyzeTimeoutRef.current = setTimeout(goQuestions, 1500);
   };
 
   return (
     <main className="page skin-flow-page skin-capture-page">
       <SkinFlowHeader title="拍照测肤" onBack={goBack} />
       <section className="skin-capture-intro">
-        <span className="skin-kicker"><Camera size={14} /> 正面自然光照片</span>
-        <h2>{capturedImage ? '照片已准备好' : '请将脸部放入取景框'}</h2>
-        <p>保持正脸、光线充足、不要遮挡额头和脸颊</p>
+        <span className="skin-kicker"><Camera size={14} /> {isAnalyzing ? '照片识别中' : '正面自然光照片'}</span>
+        <h2>{isAnalyzing ? '正在识别你的肤况' : capturedImage ? '照片已准备好' : '请将脸部放入取景框'}</h2>
+        <p>{isAnalyzing ? '请保持页面打开，识别完成后将为你补充几个问题' : '保持正脸、光线充足、不要遮挡额头和脸颊'}</p>
       </section>
 
-      <section className={`skin-capture-frame ${capturedImage ? 'has-preview' : ''}`}>
+      <section className={`skin-capture-frame ${capturedImage ? 'has-preview' : ''} ${isAnalyzing ? 'is-scanning' : ''}`}>
         {capturedImage ? (
-          <img src={capturedImage} alt="测肤照片预览" className="captured-photo" />
+          <>
+            <img src={capturedImage} alt="测肤照片预览" className="captured-photo" />
+            {isAnalyzing && (
+              <div className="skin-scan-overlay" aria-hidden="true">
+                <div className="skin-scan-face-ring" />
+                <div className="skin-scan-grid" />
+                <span className="skin-scan-dot d1" />
+                <span className="skin-scan-dot d2" />
+                <span className="skin-scan-dot d3" />
+                <span className="skin-scan-dot d4" />
+                <div className="skin-scan-beam" />
+              </div>
+            )}
+          </>
         ) : (
           <>
             <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
@@ -806,34 +854,35 @@ function SkinCapturePage({ goBack, goQuestions }) {
           </>
         )}
       </section>
+      {isAnalyzing && (
+        <>
+          <p className="skin-scan-phase">{skinScanPhases[scanPhase]}</p>
+          <div className="skin-scan-tags">
+            {skinScanTags.slice(0, visibleTags).map(tag => (
+              <span className="skin-scan-tag" key={tag}>{tag}</span>
+            ))}
+          </div>
+        </>
+      )}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       {cameraError && <p className="skin-camera-error">{cameraError}</p>}
 
       <div className="skin-capture-actions">
-        {capturedImage ? (
+        {capturedImage && !isAnalyzing ? (
           <>
             <button onClick={handleRetake}><Camera size={19} /> 重拍</button>
-            <button className="skin-capture-analyze-action" disabled={isAnalyzing} onClick={handleAnalyze}><Sparkles size={19} /> 拍照分析</button>
+            <button className="skin-capture-analyze-action" onClick={handleAnalyze}><Sparkles size={19} /> 拍照分析</button>
           </>
-        ) : (
+        ) : !capturedImage ? (
           <>
             <button disabled={!cameraReady} onClick={handleTakePhoto}><Camera size={19} /> 拍照</button>
             <button onClick={chooseFromGallery}><Upload size={19} /> 从相册选择</button>
           </>
-        )}
+        ) : null}
       </div>
       <input ref={galleryInputRef} className="checkin-file-input" type="file" accept="image/*" onChange={handleFile} />
 
       <p className="skin-disclaimer">照片不会公开，仅用于本次皮肤状态分析。</p>
-      {isAnalyzing && (
-        <div className="skin-analysis-mask">
-          <div className="skin-analysis-card">
-            <span className="skin-analysis-spinner"><Sparkles size={25} /></span>
-            <h3>正在观察你的皮肤状态</h3>
-            <p>分析油光、泛红、干燥和毛孔表现…</p>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
@@ -856,6 +905,7 @@ function SkinQuizPage({ goBack, onComplete }) {
   return (
     <main className="page skin-flow-page skin-quiz-page">
       <SkinFlowHeader title="补充几个小问题" onBack={question === 0 ? goBack : () => setQuestion(question - 1)} />
+      <p className="quiz-photo-hint">已根据照片初步识别结果，为你补充 4 个小问题</p>
       <div className="quiz-progress"><span>第 {question + 1} 题 / 4</span><i><b style={{ width: `${(question + 1) * 25}%` }} /></i></div>
       <section className="quiz-question skin-animate-in" key={question}>
         <span className="skin-kicker">帮助我更了解你的日常状态</span>
@@ -958,7 +1008,7 @@ function SkinRecommendationsPage({ result, goBack, goPlan }) {
   );
 }
 
-function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
+function ParsingVideoPage({ sourceLink, skinResult, onComplete, onBack }) {
   const [progress, setProgress] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
@@ -1014,26 +1064,9 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
       await new Promise(resolve => window.setTimeout(resolve, MOCK_PARSE_DURATION));
       if (cancelled) return;
 
-      if (apiResult?.analysis) {
-        try {
-          const plan = buildPlanFromAnalysis(apiResult.analysis);
-          finish(plan, {
-            sourceUrl: apiResult.analysis?.source_url || sourceLink,
-            videoId: apiResult.video_id || apiResult.analysis?.video_id || '',
-            single: true,
-          });
-          return;
-        } catch (err) {
-          apiError = err;
-        }
-      }
-
-      if (apiError && !apiResult) {
-        console.warn('Video parse failed.', apiError);
-      }
-      setParseError(
-        apiError?.message || '后端未返回有效解析结果，请稍后重试。',
-      );
+      const resolved = resolvePlanForDemo(sourceLink, apiResult, skinResult, planSteps);
+      finish(resolved.steps, resolved.meta);
+      void apiError;
     };
 
     run();
@@ -1113,6 +1146,13 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
 }
 
 function PlanDetailPage({ goEdit, goHome, goCheckin, steps = planSteps, planMeta = null, single = false }) {
+  const planType = planMeta?.type || 'default';
+  const isGuidePlan = planType === 'guide';
+  const isRoutinePlan = planType === 'routine';
+  const isStructuredPlan = isGuidePlan || isRoutinePlan;
+  const defaultSection = planMeta?.defaultSection || 'morning';
+  const [planVersion, setPlanVersion] = useState('original');
+  const [planSection, setPlanSection] = useState(defaultSection);
   const [step, setStep] = useState(1);
   const [saved, setSaved] = useState(false);
   const [toast, setToast] = useState('');
@@ -1121,9 +1161,39 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, steps = planSteps, planMeta
   const [showSavedDialog, setShowSavedDialog] = useState(false);
   const [showPriceDetails, setShowPriceDetails] = useState(false);
   const scrollerRef = useRef(null);
-  const pricedSteps = steps.filter(step => step.price != null);
-  const totalPrice = pricedSteps.reduce((sum, step) => sum + step.price, 0);
-  const hasPrice = pricedSteps.length > 0;
+  const activeVersionBundle = isStructuredPlan
+    ? (planVersion === 'optimized' ? planMeta.optimizedPlan : planMeta.originalPlan)
+    : null;
+  const hasRoutineSplit = isRoutinePlan
+    && Boolean(activeVersionBundle?.morning && activeVersionBundle?.evening);
+  const activeBundle = isGuidePlan
+    ? activeVersionBundle
+    : hasRoutineSplit
+      ? activeVersionBundle?.[planSection]
+      : null;
+  const displaySteps = isGuidePlan
+    ? activeBundle?.executionSteps || []
+    : activeBundle?.steps || steps;
+  const pricedSteps = displaySteps.filter(item => item.price != null);
+  const totalPrice = pricedSteps.reduce((sum, item) => sum + item.price, 0);
+  const hasPrice = !isStructuredPlan && pricedSteps.length > 0;
+
+  const resetPlanScroller = () => {
+    setStep(1);
+    setCollapsedSources([]);
+    if (scrollerRef.current) scrollerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+  };
+
+  const switchPlanVersion = version => {
+    setPlanVersion(version);
+    if (isRoutinePlan) setPlanSection(defaultSection);
+    resetPlanScroller();
+  };
+
+  const switchPlanSection = section => {
+    setPlanSection(section);
+    resetPlanScroller();
+  };
   const showToast = text => {
     setToast(text);
     setTimeout(() => setToast(''), 1400);
@@ -1148,7 +1218,7 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, steps = planSteps, planMeta
     if (idx + 1 !== step) setStep(idx + 1);
   };
   return (
-    <main className="page plan-page">
+    <main className={`page plan-page ${isGuidePlan ? 'guide-plan-page' : ''}`}>
       <Header
         title="方案详情"
         onBack={goHome}
@@ -1167,50 +1237,184 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, steps = planSteps, planMeta
         </div>
       )}
       <div className="plan-source-tag">
-        {planMeta?.videoId
-          ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自抖音视频解析 · 已标注时间轴</>
-          : single
-            ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自 {sourceVideos[0].author} 的视频 · 已标注时间轴</>
-            : <><GitMerge size={14} strokeWidth={2.4} /> 由 {sourceVideos.length} 条视频对照合并 · 可溯源</>}
+        {isStructuredPlan
+          ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自 {planMeta.author} 的视频整理</>
+          : planMeta?.videoId
+            ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自抖音视频解析 · 已标注时间轴</>
+            : single
+              ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自 {sourceVideos[0].author} 的视频 · 已标注时间轴</>
+              : <><GitMerge size={14} strokeWidth={2.4} /> 由 {sourceVideos.length} 条视频对照合并 · 可溯源</>}
       </div>
+      {isStructuredPlan && (
+        <div className="plan-version-switch" role="tablist" aria-label="方案版本">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={planVersion === 'original'}
+            className={planVersion === 'original' ? 'active' : ''}
+            onClick={() => switchPlanVersion('original')}
+          >
+            原视频方案
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={planVersion === 'optimized'}
+            className={planVersion === 'optimized' ? 'active' : ''}
+            onClick={() => switchPlanVersion('optimized')}
+          >
+            为我优化
+          </button>
+        </div>
+      )}
+      {isRoutinePlan && hasRoutineSplit && (
+        <div className="plan-routine-switch" role="tablist" aria-label="护理时段">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={planSection === 'morning'}
+            className={planSection === 'morning' ? 'active' : ''}
+            onClick={() => switchPlanSection('morning')}
+          >
+            <Sun size={15} strokeWidth={2.2} /> 早间护理
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={planSection === 'evening'}
+            className={planSection === 'evening' ? 'active' : ''}
+            onClick={() => switchPlanSection('evening')}
+          >
+            <Moon size={15} strokeWidth={2.2} /> 晚间护理
+          </button>
+        </div>
+      )}
+      {activeBundle?.title && (
+        <section className="plan-bundle-intro">
+          <h2>{activeBundle.title}</h2>
+          <p>{activeBundle.subtitle}</p>
+          {isGuidePlan && activeBundle.skinProfile && (
+            <span className="guide-skin-profile">{activeBundle.skinProfile}</span>
+          )}
+        </section>
+      )}
+      {isGuidePlan ? (
+        <>
+          <div className="guide-execution-list">
+            {displaySteps.map(stepItem => (
+              <article className="card guide-step-card" key={`${planVersion}-${stepItem.id}`}>
+                <span className="guide-step-label">{stepItem.label}</span>
+                <h3>{stepItem.title}</h3>
+                <p>{stepItem.description}</p>
+                {stepItem.tags?.length > 0 && (
+                  <div className="guide-step-tags">
+                    {stepItem.tags.map(tag => <span key={tag}>{tag}</span>)}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+          {activeBundle?.productGroups?.length > 0 && (
+            <section className="card guide-products-card">
+              <h3>视频提到的产品</h3>
+              {activeBundle.productGroups.map(group => (
+                <div className="guide-product-group" key={group.title}>
+                  <b>{group.title}</b>
+                  <ul>
+                    {group.items.map(item => (
+                      <li key={item.name}>
+                        <span>{item.name}</span>
+                        <em>{item.note}</em>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          )}
+          {activeBundle?.purchaseOrder?.length > 0 && (
+            <section className="card guide-purchase-card">
+              <h3>更适合你的购买顺序</h3>
+              {activeBundle.purchaseOrder.map(item => (
+                <div className="guide-purchase-row" key={item.priority}>
+                  <b>{item.priority}</b>
+                  <p>{item.items}</p>
+                </div>
+              ))}
+            </section>
+          )}
+          {(activeBundle?.avoidItems?.length > 0 || activeBundle?.avoidPitfalls?.length > 0) && (
+            <section className="guide-avoid-card">
+              <h3>{activeBundle.avoidTitle}</h3>
+              {activeBundle.avoidItems?.length > 0 ? (
+                <div className="guide-avoid-tags">
+                  {activeBundle.avoidItems.map(item => (
+                    <span key={item.name}>{item.name}：{item.reason}</span>
+                  ))}
+                </div>
+              ) : (
+                <ul className="guide-avoid-list">
+                  {activeBundle.avoidPitfalls.map(item => <li key={item}>{item}</li>)}
+                </ul>
+              )}
+            </section>
+          )}
+        </>
+      ) : (
+        <>
       <div className="stepper">
-        {steps.map((s, i) => <button key={s.id} onClick={() => scrollToStep(i + 1)} className={step === i + 1 ? 'active' : ''}>{i + 1}</button>)}
+        {displaySteps.map((s, i) => (
+          <button
+            key={`${planVersion}-${planSection}-${s.id}`}
+            onClick={() => scrollToStep(i + 1)}
+            className={step === i + 1 ? 'active' : ''}
+          >
+            {i + 1}
+          </button>
+        ))}
       </div>
 
       <div className="step-scroller" ref={scrollerRef} onScroll={handleScroll}>
-        {steps.map(s => {
+        {displaySteps.map(s => {
           const rows = [
             ['主要功效', s.benefits.join(' / ')],
             ['成分亮点', s.ingredients.join('、')],
             ['使用方法', s.usage],
-          ];
+          ].filter(([, content]) => content);
           const sources = single ? s.sources.filter(src => src.v === 0) : s.sources;
+          const showProduct = Boolean(s.product);
           return (
-            <section className="card plan-card step-slide" key={s.id}>
+            <section className={`card plan-card step-slide ${isStructuredPlan ? 'demo-step-card' : ''}`} key={`${planVersion}-${planSection}-${s.id}`}>
               <p className="purple-label">{s.label}</p>
               <h1>{s.title}</h1>
               <p className="desc">{s.description}</p>
-              <div className="divider" />
-              <div className="product-row">
-                <ProductImage tone={s.tone} />
-                <div className="product-copy">
-                  <h3>{s.product}</h3>
-                  <p>
-                    {s.price != null ? <><b>¥{s.price}</b> <span>/ {s.volume}</span></> : <b>价格待查</b>}
-                  </p>
-                </div>
-                <button className="replace-product" onClick={() => showToast(`正在为步骤 ${s.id} 推荐替换产品`)}>
-                  更换此产品 <ChevronRight size={14} strokeWidth={2.5} />
-                </button>
-              </div>
-              <div className="info-list">
-                {rows.map(([title, content]) => (
-                  <div className="info-item" key={title}>
-                    <h4>{title}</h4>
-                    <p>{content}</p>
+              {showProduct && (
+                <>
+                  <div className="divider" />
+                  <div className="product-row">
+                    <ProductImage tone={s.tone} />
+                    <div className="product-copy">
+                      <h3>{s.product}</h3>
+                      <p>
+                        {s.price != null ? <><b>¥{s.price}</b> <span>/ {s.volume}</span></> : <b>价格待查</b>}
+                      </p>
+                    </div>
+                    <button className="replace-product" onClick={() => showToast(`正在为步骤 ${s.id} 推荐替换产品`)}>
+                      更换此产品 <ChevronRight size={14} strokeWidth={2.5} />
+                    </button>
                   </div>
-                ))}
-              </div>
+                </>
+              )}
+              {rows.length > 0 && (
+                <div className="info-list">
+                  {rows.map(([title, content]) => (
+                    <div className="info-item" key={title}>
+                      <h4>{title}</h4>
+                      <p>{content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
               {sources.length > 0 && (
                 <div className="source-block">
                   <button
@@ -1242,7 +1446,23 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, steps = planSteps, planMeta
           );
         })}
       </div>
-      <div className="swipe-hint">左右滑动查看 {steps.length} 个步骤</div>
+      <div className="swipe-hint">左右滑动查看 {displaySteps.length} 个步骤</div>
+      {activeBundle?.insights?.length > 0 && (
+        <section className="card plan-insights-card">
+          <h3>{activeBundle.insightsTitle}</h3>
+          <ul>
+            {activeBundle.insights.map(item => <li key={item}>{item}</li>)}
+          </ul>
+        </section>
+      )}
+        </>
+      )}
+      {isStructuredPlan && (
+        <button className="plan-ai-entry" onClick={goEdit}>
+          <Sparkles size={16} strokeWidth={2.2} />
+          没有同款产品？问问肤记小助手
+        </button>
+      )}
       {hasPrice && (
         <section className="card total-card">
           <span>总价预估：<b>¥{totalPrice}</b></span>
@@ -1254,7 +1474,7 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, steps = planSteps, planMeta
       )}
       {showPriceDetails && hasPrice && (
         <section className="price-details">
-          {steps.filter(s => s.price != null).map(s => <div key={s.id}><span>{s.title}</span><b>¥{s.price}</b></div>)}
+          {displaySteps.filter(s => s.price != null).map(s => <div key={s.id}><span>{s.title}</span><b>¥{s.price}</b></div>)}
         </section>
       )}
       <PlanActionBar
@@ -1974,6 +2194,13 @@ function App() {
   }, [screen]);
   const setTab = tab => setScreen(tab);
   const goPlan = (plan = null, meta = null) => {
+    if (meta?.type === 'default') {
+      setActivePlan(null);
+      setPlanMeta({ type: 'default' });
+      localStorage.removeItem(GENERATED_PLAN_KEY);
+      setScreen('plan');
+      return;
+    }
     if (plan) {
       setActivePlan(plan);
       setPlanMeta(meta);
@@ -2003,6 +2230,7 @@ function App() {
         {screen === 'parsing' && (
           <ParsingVideoPage
             sourceLink={pendingDouyinLink || localStorage.getItem(PENDING_DOUYIN_LINK_KEY) || ''}
+            skinResult={skinResult}
             onBack={cancelParsing}
             onComplete={(plan, meta) => goPlan(plan, meta)}
           />
