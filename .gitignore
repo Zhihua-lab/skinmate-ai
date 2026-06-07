@@ -1,11 +1,36 @@
-.env
+# Python
 __pycache__/
 *.pyc
+.env
+
+# Video / analysis artifacts
 *.mp4
 *.wav
 frames*/
 model_outputs/
 skincare_outputs/
 .superpowers/
-.idea/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.cache/
+.vite/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env.local
+.env.*.local
+
+# Editor / OS
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db

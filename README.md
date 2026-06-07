@@ -1,8 +1,47 @@
-# Skincare AI Backend
+# SkinMate AI
 
-这是一个用于处理抖音护肤视频的 Python 后端项目。当前项目已经提供 FastAPI 接口，可直接部署到 Railway 或 Render。
+这是 `SkinMate AI` 的代码仓库，目前同时包含：
 
-## API
+- `frontend/`：前端 Web App
+- 当前根目录下的 Python 视频解析后端
+- `ai/`、`backend/`、`docs/`：后续模块说明与占位目录
+
+## Repository Structure
+
+```text
+skinmate-ai/
+├─ frontend/                # 前端 Web App
+├─ ai/                      # AI 模块说明
+├─ backend/                 # 后端模块说明
+├─ docs/                    # 文档
+├─ photos/                  # 设计素材
+├─ scripts/                 # 素材处理脚本
+├─ app.py                   # FastAPI 入口
+├─ skincare_video_analyzer.py
+├─ skincare_web_app.py
+├─ analyze_skincare_douyin.py
+├─ requirements.txt
+├─ Procfile
+└─ README.md
+```
+
+## Frontend
+
+前端代码位于 `frontend/`，保留原有项目结构与资源文件。
+
+本地开发：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Python Backend
+
+当前 Python 后端用于处理抖音护肤视频，提供 FastAPI 接口。
+
+### API
 
 - `GET /health`
 - `POST /analyze-video`
@@ -26,7 +65,7 @@
 }
 ```
 
-## Environment Variables
+### Environment Variables
 
 参考 [`.env.example`](C:/Users/Kevin/Desktop/skincare-ai-backend/.env.example)：
 
@@ -37,13 +76,13 @@ OUTPUT_DIR=skincare_outputs
 CDP_ENDPOINT=http://localhost:3456
 ```
 
-## Local Run
+### Local Run
 
 ```bash
 uvicorn app:app --reload
 ```
 
-## Deploy Run
+### Deploy Run
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port $PORT
