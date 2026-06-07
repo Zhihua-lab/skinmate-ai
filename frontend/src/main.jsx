@@ -44,8 +44,145 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { CHECKIN_BUCKET, supabase } from './lib/supabase';
 import './styles.css';
 import { analyzeVideoUrl, buildPlanFromAnalysis } from './videoAnalysis';
+
+const LOCAL_CHECKIN_KEY = 'fuji-today-checkin';
+
+function getTodayDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function readLocalTodayCheckin() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LOCAL_CHECKIN_KEY)) || null;
+    if (!saved?.date) return null;
+    const savedDate = new Date(saved.date);
+    const today = new Date();
+    return savedDate.toDateString() === today.toDateString() ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureSupabaseUser() {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (sessionData.session?.user) return sessionData.session.user;
+
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) throw error;
+  return data.user;
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(',');
+  const mimeMatch = header.match(/data:(.*?);base64/);
+  const mimeType = mimeMatch?.[1] || 'image/jpeg';
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+async function createSignedCheckinUrl(path) {
+  if (!path) return '';
+  const { data, error } = await supabase.storage.from(CHECKIN_BUCKET).createSignedUrl(path, 60 * 60 * 24 * 7);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+async function fetchTodayCheckin() {
+  const user = await ensureSupabaseUser();
+  const todayKey = getTodayDateKey();
+  const { data, error } = await supabase
+    .from('checkins')
+    .select('id, checkin_date, image_url, note, ai_advice')
+    .eq('user_id', user.id)
+    .eq('checkin_date', todayKey)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const photo = data.image_url ? await createSignedCheckinUrl(data.image_url) : '';
+  return {
+    id: data.id,
+    photo,
+    storagePath: data.image_url || '',
+    note: data.note || '',
+    date: `${data.checkin_date}T00:00:00.000Z`,
+    aiAdvice: data.ai_advice || '',
+  };
+}
+
+async function persistCheckin(record) {
+  const user = await ensureSupabaseUser();
+  const todayKey = getTodayDateKey(new Date(record.date));
+  const storagePath = `${user.id}/${todayKey}.jpg`;
+  const blob = record.photo.startsWith('data:') ? dataUrlToBlob(record.photo) : null;
+
+  if (blob) {
+    const { error: uploadError } = await supabase.storage.from(CHECKIN_BUCKET).upload(storagePath, blob, {
+      cacheControl: '3600',
+      contentType: blob.type || 'image/jpeg',
+      upsert: true,
+    });
+    if (uploadError) throw uploadError;
+  }
+
+  const payload = {
+    user_id: user.id,
+    checkin_date: todayKey,
+    image_url: storagePath,
+    note: record.note,
+    ai_advice: record.aiAdvice,
+  };
+
+  const { error: upsertError } = await supabase.from('checkins').upsert(payload, {
+    onConflict: 'user_id,checkin_date',
+  });
+  if (upsertError) throw upsertError;
+
+  const photo = await createSignedCheckinUrl(storagePath);
+  return {
+    ...record,
+    photo,
+    storagePath,
+  };
+}
+
+async function deleteTodayCheckin() {
+  const user = await ensureSupabaseUser();
+  const todayKey = getTodayDateKey();
+  const { data, error } = await supabase
+    .from('checkins')
+    .select('image_url')
+    .eq('user_id', user.id)
+    .eq('checkin_date', todayKey)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (data?.image_url) {
+    const { error: storageError } = await supabase.storage.from(CHECKIN_BUCKET).remove([data.image_url]);
+    if (storageError) throw storageError;
+  }
+
+  const { error: deleteError } = await supabase
+    .from('checkins')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('checkin_date', todayKey);
+
+  if (deleteError) throw deleteError;
+}
 
 const sourceVideos = [
   { id: 'v1', author: '油痘肌研究所', handle: '@skin_lab', duration: '03:12', tips: 5, seed: 'rank-1' },
@@ -1067,6 +1204,8 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
   const [preview, setPreview] = useState(record?.photo || '');
   const [photoData, setPhotoData] = useState(record?.photo || '');
   const [note, setNote] = useState(record?.note || '');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
   const todayDate = new Date();
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(todayDate.getFullYear(), todayDate.getMonth(), 1));
   const today = todayDate.getDate();
@@ -1084,6 +1223,12 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
   useEffect(() => () => {
     if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
   }, [preview]);
+
+  useEffect(() => {
+    setPreview(record?.photo || '');
+    setPhotoData(record?.photo || '');
+    setNote(record?.note || '');
+  }, [record]);
 
   const stopCheckinCamera = () => {
     if (!cameraStreamRef.current) return;
@@ -1174,12 +1319,21 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
 
   const saveCheckin = () => {
     if (!photoData) return;
-    onSave({
+    setSaving(true);
+    setSaveError('');
+    Promise.resolve(onSave({
       photo: photoData,
       note: note.trim(),
       date: todayDate.toISOString(),
       aiAdvice,
-    });
+    }))
+      .catch(error => {
+        console.error(error);
+        setSaveError('保存失败，已保留本地内容，请稍后重试。');
+      })
+      .finally(() => {
+        setSaving(false);
+      });
   };
 
   const changeMonth = offset => {
@@ -1241,7 +1395,10 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
                   <b>今日备注</b>
                   <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="记录一下今天的皮肤状态，比如出油、泛红、长痘、干燥等" />
                 </label>
-                <button className="primary-btn save-checkin" disabled={!photoData} onClick={saveCheckin}>保存今日打卡</button>
+                {saveError && <p className="checkin-save-error">{saveError}</p>}
+                <button className="primary-btn save-checkin" disabled={!photoData || saving} onClick={saveCheckin}>
+                  {saving ? '保存中...' : '保存今日打卡'}
+                </button>
               </>
             ) : (
               <button className="upload-zone" onClick={() => setSheetOpen(true)}>
@@ -1474,24 +1631,46 @@ function App() {
   const [skinResult, setSkinResult] = useState(() => window.location.pathname === '/skin-test/result'
     ? calculateSkinResult(['D', 'C', 'B', 'C'])
     : null);
-  const [checkinRecord, setCheckinRecord] = useState(() => {
+  const [checkinRecord, setCheckinRecord] = useState(() => readLocalTodayCheckin());
+
+  useEffect(() => {
+    let alive = true;
+
+    fetchTodayCheckin()
+      .then(record => {
+        if (!alive || !record) return;
+        setCheckinRecord(record);
+        localStorage.setItem(LOCAL_CHECKIN_KEY, JSON.stringify(record));
+      })
+      .catch(error => {
+        console.warn('Failed to load remote checkin, using local cache instead.', error);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const saveCheckin = async record => {
+    let nextRecord = record;
     try {
-      const saved = JSON.parse(localStorage.getItem('fuji-today-checkin')) || null;
-      if (!saved?.date) return null;
-      const savedDate = new Date(saved.date);
-      const today = new Date();
-      return savedDate.toDateString() === today.toDateString() ? saved : null;
-    } catch {
-      return null;
+      nextRecord = await persistCheckin(record);
+    } catch (error) {
+      console.warn('Failed to persist checkin to Supabase, keeping local cache.', error);
     }
-  });
-  const saveCheckin = record => {
-    setCheckinRecord(record);
-    localStorage.setItem('fuji-today-checkin', JSON.stringify(record));
+
+    setCheckinRecord(nextRecord);
+    localStorage.setItem(LOCAL_CHECKIN_KEY, JSON.stringify(nextRecord));
+    return nextRecord;
   };
-  const resetCheckin = () => {
+  const resetCheckin = async () => {
     setCheckinRecord(null);
-    localStorage.removeItem('fuji-today-checkin');
+    localStorage.removeItem(LOCAL_CHECKIN_KEY);
+    try {
+      await deleteTodayCheckin();
+    } catch (error) {
+      console.warn('Failed to delete remote checkin.', error);
+    }
   };
   useEffect(() => {
     const route = skinRouteByScreen[screen];

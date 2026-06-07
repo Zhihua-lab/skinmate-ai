@@ -475,6 +475,7 @@ button { border: 0; background: transparent; cursor: pointer; color: inherit; }
 .checkin-note textarea { width:100%; min-height:84px; resize:none; outline:none; border:1px solid var(--border); border-radius:14px; padding:11px 12px; color:var(--text); background:#fdf8fa; font:inherit; font-size:13px; line-height:1.55; }
 .checkin-note textarea:focus { border-color:#f1a6bb; background:#fff; box-shadow:0 0 0 4px rgba(232,113,143,.1); }
 .checkin-note textarea::placeholder { color:#c5acb5; }
+.checkin-save-error { margin:10px 2px 0; color:#c44a6d; font-size:12px; line-height:1.5; }
 .save-checkin { width:100%; margin-top:12px; }
 .save-checkin:disabled { opacity:.5; box-shadow:none; cursor:default; }
 .checkin-success { display:flex; align-items:center; gap:11px; }
