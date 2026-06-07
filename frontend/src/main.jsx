@@ -46,7 +46,7 @@ import {
 } from 'lucide-react';
 import { CHECKIN_BUCKET, supabase } from './lib/supabase';
 import './styles.css';
-import { analyzeVideoUrl, buildPlanFromAnalysis } from './videoAnalysis';
+import { analyzeVideoUrl, buildPlanFromAnalysis, extractDouyinUrl } from './videoAnalysis';
 
 const LOCAL_CHECKIN_KEY = 'fuji-today-checkin';
 
@@ -347,12 +347,19 @@ function HomePage({ goPlan, goSkinTest }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const submit = async () => {
+    if (loading) return;
     const text = draft.trim();
-    if (!text || loading) return;
+    const douyinUrl = text ? extractDouyinUrl(text) : null;
+    if (!douyinUrl) {
+      setError('');
+      goPlan();
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
-      const data = await analyzeVideoUrl(text);
+      const data = await analyzeVideoUrl(douyinUrl);
       const plan = buildPlanFromAnalysis(data.analysis);
       goPlan(plan, {
         sourceUrl: data.analysis?.source_url || text,
@@ -399,13 +406,13 @@ function HomePage({ goPlan, goSkinTest }) {
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && submit()}
-            placeholder="粘贴抖音视频链接"
+            placeholder="粘贴抖音分享文案（需含 douyin.com 链接）"
           />
         </div>
 
         <button
           className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`}
-          disabled={!draft.trim() || loading}
+          disabled={loading}
           onClick={submit}
         >
           <span>{loading ? '正在解析视频' : '开始整理'}</span>
@@ -1690,10 +1697,8 @@ function App() {
   }, [screen]);
   const setTab = tab => setScreen(tab);
   const goPlan = (plan = null, meta = null) => {
-    if (plan) {
-      setActivePlan(plan);
-      setPlanMeta(meta);
-    }
+    setActivePlan(plan);
+    setPlanMeta(meta);
     setScreen('plan');
   };
   return (

@@ -121,23 +121,65 @@ export function buildPlanFromAnalysis(analysis) {
   });
 }
 
-export async function analyzeVideoUrl(url) {
-  const apiBase = import.meta.env.VITE_API_BASE || '';
-  const response = await fetch(`${apiBase}/analyze-video`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: url.trim() }),
-  });
+export function extractDouyinUrl(text) {
+  const match = String(text || '').match(/https?:\/\/(?:v\.)?douyin\.com\/[^\s，。；;!?！？)）]+/i);
+  return match ? match[0].replace(/[.,，。;；!！?？]+$/, '') : null;
+}
 
-  let data = {};
+function formatApiError(data, status) {
+  const detail = data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map(item => item?.msg || JSON.stringify(item)).join('；');
+  }
+  if (data?.error) return String(data.error);
+  if (status === 503) return '解析服务未配置。请联系管理员设置后端地址。';
+  if (status === 502) return '无法连接后端服务，请确认 Railway 后端已启动。';
+  if (status === 500) return '后端解析出错，请检查 DASHSCOPE_API_KEY 和 CDP 服务是否已配置。';
+  return `视频解析失败（HTTP ${status || '未知'}），请稍后重试`;
+}
+
+function resolveAnalyzeEndpoint() {
+  const apiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+  return apiBase ? `${apiBase}/analyze-video` : '/api/analyze-video';
+}
+
+export async function analyzeVideoUrl(url) {
+  const endpoint = resolveAnalyzeEndpoint();
+  let response;
+
   try {
-    data = await response.json();
-  } catch {
-    data = {};
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url.trim() }),
+    });
+  } catch (error) {
+    if (error?.name === 'TypeError') {
+      throw new Error('无法连接解析服务，请确认后端已部署并且网络正常。');
+    }
+    throw error;
+  }
+
+  const raw = await response.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      if (raw.includes('<!doctype html') || raw.includes('<html')) {
+        throw new Error('解析接口未接通（返回了网页而不是 API 数据）。请在 Netlify 配置 BACKEND_URL 环境变量。');
+      }
+      throw new Error(formatApiError({}, response.status));
+    }
   }
 
   if (!response.ok) {
-    throw new Error(data.detail || data.error || '视频解析失败，请稍后重试');
+    throw new Error(formatApiError(data, response.status));
+  }
+
+  if (!data?.analysis) {
+    throw new Error('后端未返回有效解析结果，请稍后重试。');
   }
 
   return data;
