@@ -144,19 +144,6 @@ const rankingUsers = [
   ['认真护肤的阿花', 20, 'rank-5'],
 ];
 
-function StatusBar() {
-  return (
-    <div className="status-bar">
-      <span>9:41</span>
-      <div className="status-icons">
-        <span className="signal"><i></i><i></i><i></i><i></i></span>
-        <span className="wifi">◜</span>
-        <span className="battery"><i></i></span>
-      </div>
-    </div>
-  );
-}
-
 function BottomNav({ tab, setTab }) {
   const items = [
     ['home', '方案', ClipboardList],
@@ -226,7 +213,6 @@ function HomePage({ goPlan, goSkinTest }) {
   };
   return (
     <main className="page home-page">
-      <StatusBar />
       <section className="hero-row">
         <div className="hero-text">
           <div className="brand-pill"><Sparkles size={14} /> 你的护肤小助手</div>
@@ -401,7 +387,7 @@ function calculateSkinResult(answers) {
 }
 
 function SkinFlowHeader({ title, onBack }) {
-  return <><StatusBar /><Header title={title} onBack={onBack} /></>;
+  return <Header title={title} onBack={onBack} />;
 }
 
 function SkinTestPage({ goHome, goCapture }) {
@@ -763,7 +749,6 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, single = false }) {
   };
   return (
     <main className="page plan-page">
-      <StatusBar />
       <Header
         title="方案详情"
         onBack={goHome}
@@ -951,7 +936,6 @@ function EditPlanPage({ goPlan }) {
   };
   return (
     <main className="page edit-page">
-      <StatusBar />
       <Header title="修改方案" onBack={goPlan} />
 
       <div className="edit-assistant">
@@ -1194,7 +1178,6 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
 
   return (
     <main className="page checkin-page green-page">
-      <StatusBar />
       <div className="checkin-hero">
         <div className="hero-text">
           <div className="brand-pill"><CalendarCheck size={14} /> 每日护肤打卡</div>
@@ -1332,7 +1315,6 @@ function CheckinRecordPage({ goCheckin, goPlan, record }) {
   const displayDate = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
   return (
     <main className="page record-page">
-      <StatusBar />
       <Header title="打卡记录" onBack={goCheckin} />
       <div className="date-switch"><ChevronLeft /><h2>{displayDate}</h2><ChevronRight /></div>
       <section className="card record-card">
@@ -1357,8 +1339,6 @@ function RankingPage() {
   const [rankTab, setRankTab] = useState('总榜');
   return (
     <main className="page ranking-page warm-page">
-      <StatusBar />
-      <header className="brand-header">肤记<Sparkles size={12} className="brand-spark-sm" /></header>
       <section className="ranking-hero">
         <div className="hero-text">
           <h1>打卡排行榜</h1>
@@ -1407,9 +1387,6 @@ function ProfilePage({ goPlan, goRecord }) {
   ];
   return (
     <main className="page profile-page warm-page">
-      <StatusBar />
-      <header className="brand-header">肤记<Sparkles size={12} className="brand-spark-sm" /></header>
-
       <section className="profile-hero">
         <div className="profile-id">
           <div className="profile-avatar-wrap">
