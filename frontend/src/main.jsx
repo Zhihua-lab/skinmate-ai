@@ -45,6 +45,7 @@ import {
   Zap,
 } from 'lucide-react';
 import './styles.css';
+import { analyzeVideoUrl, buildPlanFromAnalysis } from './videoAnalysis';
 
 const sourceVideos = [
   { id: 'v1', author: '油痘肌研究所', handle: '@skin_lab', duration: '03:12', tips: 5, seed: 'rank-1' },
@@ -207,9 +208,25 @@ function ProductImage({ tone }) {
 function HomePage({ goPlan, goSkinTest }) {
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
-  const submit = () => {
+  const [error, setError] = useState('');
+  const submit = async () => {
+    const text = draft.trim();
+    if (!text || loading) return;
     setLoading(true);
-    setTimeout(() => { setLoading(false); goPlan(); }, 700);
+    setError('');
+    try {
+      const data = await analyzeVideoUrl(text);
+      const plan = buildPlanFromAnalysis(data.analysis);
+      goPlan(plan, {
+        sourceUrl: data.analysis?.source_url || text,
+        videoId: data.video_id || data.analysis?.video_id || '',
+        single: true,
+      });
+    } catch (err) {
+      setError(err.message || '视频解析失败，请稍后重试');
+    } finally {
+      setLoading(false);
+    }
   };
   return (
     <main className="page home-page">
@@ -249,10 +266,16 @@ function HomePage({ goPlan, goSkinTest }) {
           />
         </div>
 
-        <button className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`} onClick={submit}>
-          <span>{loading ? '正在整理' : '开始整理'}</span>
+        <button
+          className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`}
+          disabled={!draft.trim() || loading}
+          onClick={submit}
+        >
+          <span>{loading ? '正在解析视频' : '开始整理'}</span>
           {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
         </button>
+        {error && <p className="import-error">{error}</p>}
+        {loading && <p className="import-hint">正在提取抖音视频内容并识别产品，通常需要 20-90 秒，请稍候。</p>}
       </section>
 
       <section className="card skintest-cta" onClick={goSkinTest}>
@@ -715,7 +738,7 @@ function SkinRecommendationsPage({ result, goBack, goPlan }) {
   );
 }
 
-function PlanDetailPage({ goEdit, goHome, goCheckin, single = false }) {
+function PlanDetailPage({ goEdit, goHome, goCheckin, steps = planSteps, planMeta = null, single = false }) {
   const [step, setStep] = useState(1);
   const [saved, setSaved] = useState(false);
   const [toast, setToast] = useState('');
@@ -724,6 +747,9 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, single = false }) {
   const [showSavedDialog, setShowSavedDialog] = useState(false);
   const [showPriceDetails, setShowPriceDetails] = useState(false);
   const scrollerRef = useRef(null);
+  const pricedSteps = steps.filter(step => step.price != null);
+  const totalPrice = pricedSteps.reduce((sum, step) => sum + step.price, 0);
+  const hasPrice = pricedSteps.length > 0;
   const showToast = text => {
     setToast(text);
     setTimeout(() => setToast(''), 1400);
@@ -767,16 +793,18 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, single = false }) {
         </div>
       )}
       <div className="plan-source-tag">
-        {single
-          ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自 {sourceVideos[0].author} 的视频 · 已标注时间轴</>
-          : <><GitMerge size={14} strokeWidth={2.4} /> 由 {sourceVideos.length} 条视频对照合并 · 可溯源</>}
+        {planMeta?.videoId
+          ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自抖音视频解析 · 已标注时间轴</>
+          : single
+            ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自 {sourceVideos[0].author} 的视频 · 已标注时间轴</>
+            : <><GitMerge size={14} strokeWidth={2.4} /> 由 {sourceVideos.length} 条视频对照合并 · 可溯源</>}
       </div>
       <div className="stepper">
-        {planSteps.map((s, i) => <button key={s.id} onClick={() => scrollToStep(i + 1)} className={step === i + 1 ? 'active' : ''}>{i + 1}</button>)}
+        {steps.map((s, i) => <button key={s.id} onClick={() => scrollToStep(i + 1)} className={step === i + 1 ? 'active' : ''}>{i + 1}</button>)}
       </div>
 
       <div className="step-scroller" ref={scrollerRef} onScroll={handleScroll}>
-        {planSteps.map(s => {
+        {steps.map(s => {
           const rows = [
             ['主要功效', s.benefits.join(' / ')],
             ['成分亮点', s.ingredients.join('、')],
@@ -793,7 +821,9 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, single = false }) {
                 <ProductImage tone={s.tone} />
                 <div className="product-copy">
                   <h3>{s.product}</h3>
-                  <p><b>¥{s.price}</b> <span>/ {s.volume}</span></p>
+                  <p>
+                    {s.price != null ? <><b>¥{s.price}</b> <span>/ {s.volume}</span></> : <b>价格待查</b>}
+                  </p>
                 </div>
                 <button className="replace-product" onClick={() => showToast(`正在为步骤 ${s.id} 推荐替换产品`)}>
                   更换此产品 <ChevronRight size={14} strokeWidth={2.5} />
@@ -838,17 +868,19 @@ function PlanDetailPage({ goEdit, goHome, goCheckin, single = false }) {
           );
         })}
       </div>
-      <div className="swipe-hint">左右滑动查看 {planSteps.length} 个步骤</div>
-      <section className="card total-card">
-        <span>总价预估：<b>¥882</b></span>
-        <button onClick={() => setShowPriceDetails(!showPriceDetails)}>
-          {showPriceDetails ? '收起明细' : '展开明细'}
-          {showPriceDetails ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-      </section>
-      {showPriceDetails && (
+      <div className="swipe-hint">左右滑动查看 {steps.length} 个步骤</div>
+      {hasPrice && (
+        <section className="card total-card">
+          <span>总价预估：<b>¥{totalPrice}</b></span>
+          <button onClick={() => setShowPriceDetails(!showPriceDetails)}>
+            {showPriceDetails ? '收起明细' : '展开明细'}
+            {showPriceDetails ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+        </section>
+      )}
+      {showPriceDetails && hasPrice && (
         <section className="price-details">
-          {planSteps.map(s => <div key={s.id}><span>{s.title}</span><b>¥{s.price}</b></div>)}
+          {steps.filter(s => s.price != null).map(s => <div key={s.id}><span>{s.title}</span><b>¥{s.price}</b></div>)}
         </section>
       )}
       <PlanActionBar
@@ -1046,7 +1078,7 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
   const marked = [3, 7, 16, 19];
   const isComplete = Boolean(record);
   const streak = isComplete ? 8 : 7;
-  const totalDays = isComplete ? 16 : 15;
+  const totalDays = isComplete ? 22 : 21;
   const aiAdvice = '今天的皮肤状态已记录。建议继续保持温和清洁和基础保湿，避免频繁更换护肤品，坚持观察 21 天变化。';
 
   useEffect(() => () => {
@@ -1437,6 +1469,8 @@ const skinScreenByRoute = Object.fromEntries(Object.entries(skinRouteByScreen).m
 
 function App() {
   const [screen, setScreen] = useState(() => skinScreenByRoute[window.location.pathname] || 'home');
+  const [activePlan, setActivePlan] = useState(null);
+  const [planMeta, setPlanMeta] = useState(null);
   const [skinResult, setSkinResult] = useState(() => window.location.pathname === '/skin-test/result'
     ? calculateSkinResult(['D', 'C', 'B', 'C'])
     : null);
@@ -1476,7 +1510,13 @@ function App() {
     return 'home';
   }, [screen]);
   const setTab = tab => setScreen(tab);
-  const goPlan = () => setScreen('plan');
+  const goPlan = (plan = null, meta = null) => {
+    if (plan) {
+      setActivePlan(plan);
+      setPlanMeta(meta);
+    }
+    setScreen('plan');
+  };
   return (
     <div className="app-shell">
       <div className={`phone ${screen === 'home' ? 'home-phone' : ''}`}>
@@ -1486,7 +1526,16 @@ function App() {
         {screen === 'skin-quiz' && <SkinQuizPage goBack={() => setScreen('skin-capture')} onComplete={result => { setSkinResult(result); setScreen('skin-result'); }} />}
         {screen === 'skin-result' && skinResult && <SkinResultPage result={skinResult} viewPlan={goPlan} importVideo={() => setScreen('home')} restart={() => setScreen('skintest')} />}
         {screen === 'skin-recommendations' && skinResult && <SkinRecommendationsPage result={skinResult} goBack={() => setScreen('skin-result')} goPlan={goPlan} />}
-        {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} goCheckin={() => setScreen('checkin')} single />}
+        {screen === 'plan' && (
+          <PlanDetailPage
+            steps={activePlan || planSteps}
+            planMeta={planMeta}
+            goHome={() => setScreen('home')}
+            goEdit={() => setScreen('edit')}
+            goCheckin={() => setScreen('checkin')}
+            single
+          />
+        )}
         {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
         {screen === 'checkin' && <CheckinPage record={checkinRecord} onSave={saveCheckin} onReset={resetCheckin} goRecord={() => setScreen('record')} />}
         {screen === 'record' && <CheckinRecordPage record={checkinRecord} goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}

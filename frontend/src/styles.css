@@ -120,6 +120,19 @@ button { border: 0; background: transparent; cursor: pointer; color: inherit; }
 .generate-btn:active { transform: translateY(1px) scale(.992); box-shadow: 0 6px 16px rgba(227, 106, 140, .26), inset 0 1px 0 rgba(255,255,255,.4); }
 .generate-btn.is-loading { filter: saturate(.85) brightness(1.02); pointer-events: none; }
 .generate-btn.is-loading svg { animation: spin 1s linear infinite; }
+.import-error {
+  margin: 10px 0 0;
+  color: #b55e75;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+.import-hint {
+  margin: 10px 0 0;
+  color: #6d7a74;
+  font-size: 12px;
+  line-height: 1.55;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 .case-tip { display:flex; justify-content:center; align-items:center; gap:2px; font-size: 14px; color:#6b5860; margin: 6px 0 16px; }
 .case-tip span { color:var(--purple); font-weight:800; }
