@@ -628,6 +628,161 @@ button { border: 0; background: transparent; cursor: pointer; color: inherit; }
 }
 .plan-page { padding-bottom: 88px; }
 
+/* 方案详情：局部操作轻量化，全局操作固定在 TabBar 上方 */
+.plan-page {
+  position: relative;
+  padding-bottom: 166px;
+  background: linear-gradient(180deg, #fff8fa 0%, #fff 42%);
+}
+.plan-page .header { position: relative; z-index: 9; }
+.header-more { justify-self: end; border-radius: 50%; color: #76545f; }
+.header-more:active { background: var(--purple-soft); }
+.plan-more-menu {
+  position: absolute;
+  z-index: 12;
+  top: 94px;
+  right: 20px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 32px rgba(120, 65, 85, .16);
+}
+.plan-more-menu button {
+  height: 40px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  color: #674a54;
+  font-size: 13px;
+  font-weight: 650;
+}
+.plan-more-menu button:active { background: var(--purple-soft); color: var(--purple); }
+.plan-source-tag { max-width: calc(100% - 16px); line-height: 1.45; }
+.plan-card { box-shadow: 0 10px 28px rgba(180, 90, 120, .08); }
+.product-copy { flex: 1; min-width: 0; }
+.product-copy h3 { line-height: 1.45; }
+.replace-product {
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 0 4px 6px;
+  color: var(--purple);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.replace-product:active { opacity: .65; }
+.swipe-hint { margin: 10px 0 4px; }
+.price-details {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .9);
+  border: 1px solid var(--border);
+}
+.price-details div {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f7edf1;
+  color: var(--muted);
+  font-size: 13px;
+}
+.price-details div:last-child { border-bottom: 0; }
+.price-details b { color: #624650; font-size: 13px; }
+.plan-action-bar {
+  position: fixed;
+  z-index: 6;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 64px;
+  width: min(430px, 100vw);
+  height: 82px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: .95fr 1.35fr .95fr;
+  gap: 8px;
+  background: rgba(255, 255, 255, .96);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -10px 26px rgba(180, 90, 120, .08);
+  backdrop-filter: blur(12px);
+}
+.plan-action-bar button {
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.plan-secondary-action {
+  border: 1.5px solid #efabc0;
+  color: var(--purple);
+  background: #fff;
+}
+.plan-secondary-action.is-saved { background: var(--purple-soft); }
+.plan-primary-action {
+  color: #fff;
+  background: linear-gradient(135deg, #f7a0b8, #e8718f);
+  box-shadow: 0 9px 20px rgba(232, 113, 143, .28);
+}
+.plan-action-bar button:active { transform: translateY(1px); }
+.plan-dialog-mask {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(42, 31, 36, .34);
+  backdrop-filter: blur(3px);
+}
+.plan-saved-dialog {
+  width: 100%;
+  padding: 24px 20px 18px;
+  text-align: center;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(120, 65, 85, .22);
+}
+.saved-dialog-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: var(--grad);
+  box-shadow: 0 8px 18px rgba(232, 113, 143, .24);
+}
+.plan-saved-dialog h2 { margin: 0 0 7px; font-family: var(--serif); font-size: 20px; }
+.plan-saved-dialog p { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.plan-saved-dialog .primary-btn { width: 100%; }
+.dialog-share {
+  width: 100%;
+  height: 44px;
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--purple);
+  font-size: 13px;
+  font-weight: 650;
+}
+
 /* 字体：清爽、克制、高级的移动端中文质感 */
 :root {
   font-family: "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -798,3 +953,228 @@ h1, h2, h3 { font-weight: 650; }
 
 .reco-note { flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:6px; margin:10px 0; font-size:12.5px; color:#9a7f88; }
 .confirm-skin { flex-shrink:0; width:100%; height:52px; border-radius:16px; font-size:16px; }
+
+/* 方案详情：移动端高信息密度 */
+.plan-page {
+  padding: 0 16px 154px;
+}
+.plan-page .status-bar {
+  height: 42px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+.plan-page .header {
+  height: 42px;
+  grid-template-columns: 38px 1fr 38px;
+}
+.plan-page .header h1 {
+  font-size: 19px;
+  letter-spacing: .02em;
+}
+.plan-page .header button {
+  width: 36px;
+  height: 36px;
+}
+.plan-page .header button:first-child svg {
+  width: 23px;
+  height: 23px;
+}
+.plan-page .header-more {
+  color: #b58a98;
+}
+.plan-page .header-more svg {
+  width: 21px;
+  height: 21px;
+}
+.plan-page .plan-more-menu {
+  top: 76px;
+  right: 16px;
+}
+.plan-page .plan-source-tag {
+  margin: 0 4px 1px;
+  padding: 5px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.plan-page .stepper {
+  gap: 8px;
+  margin: 6px 5px 9px;
+}
+.plan-page .stepper::before {
+  left: 28px;
+  right: 28px;
+  height: 2px;
+  background: #f2e7eb;
+}
+.plan-page .stepper button {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+.plan-page .stepper button.active {
+  box-shadow: 0 5px 12px rgba(232, 113, 143, .22);
+}
+.plan-page .step-scroller {
+  gap: 12px;
+  padding-bottom: 1px;
+}
+.plan-page .plan-card {
+  padding: 13px 14px 12px;
+  border-color: rgba(243, 228, 234, .7);
+  border-radius: 20px;
+  box-shadow: 0 7px 20px rgba(180, 90, 120, .055);
+}
+.plan-page .purple-label {
+  margin-bottom: 1px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.plan-page .plan-card h1 {
+  margin-bottom: 4px;
+  font-size: 23px;
+  line-height: 1.2;
+  letter-spacing: .02em;
+}
+.plan-page .desc {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.plan-page .plan-card .divider {
+  margin: 9px 0;
+  background: #f7edf1;
+}
+.plan-page .product-row {
+  gap: 10px;
+  min-height: 62px;
+  padding-bottom: 8px;
+}
+.plan-page .product-img {
+  width: 62px;
+  height: 62px;
+}
+.plan-page .mini-tube {
+  width: 29px;
+  height: 56px;
+  font-size: 6px;
+}
+.plan-page .product-row h3 {
+  margin-bottom: 3px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.plan-page .product-row p {
+  font-size: 19px;
+  line-height: 1.2;
+}
+.plan-page .product-row span {
+  font-size: 12px;
+}
+.plan-page .replace-product {
+  margin-bottom: 1px;
+  padding: 3px 0 3px 4px;
+  font-size: 11.5px;
+}
+.plan-page .info-list {
+  border-color: #f7edf1;
+}
+.plan-page .info-item {
+  padding: 8px 0;
+  border-color: #f7edf1;
+}
+.plan-page .info-item h4 {
+  margin-bottom: 2px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.plan-page .info-item p {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.plan-page .source-block {
+  margin-top: 7px;
+  padding-top: 8px;
+  border-color: #f7edf1;
+}
+.plan-page .source-toggle {
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.plan-page .source-toggle > span {
+  gap: 5px;
+}
+.plan-page .source-timeline {
+  margin-top: 9px;
+}
+.plan-page .tl-item {
+  grid-template-columns: 38px 13px 1fr;
+  gap: 6px;
+  padding-bottom: 9px;
+}
+.plan-page .tl-time {
+  font-size: 11px;
+}
+.plan-page .tl-node::after {
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 0 3px #fbeaf0;
+}
+.plan-page .tl-body p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.plan-page .swipe-hint {
+  margin: 6px 0 2px;
+  font-size: 10.5px;
+  letter-spacing: .04em;
+}
+.plan-page .total-card {
+  min-height: 46px;
+  margin-top: 7px;
+  padding: 10px 14px;
+  border-radius: 17px;
+  box-shadow: 0 6px 18px rgba(180, 90, 120, .055);
+  font-size: 13px;
+}
+.plan-page .total-card b {
+  font-size: 17px;
+}
+.plan-page .total-card button {
+  gap: 2px;
+  font-size: 12px;
+}
+.plan-page .price-details {
+  margin-top: 6px;
+  padding: 5px 14px;
+}
+.plan-page .price-details div {
+  min-height: 30px;
+  font-size: 12px;
+}
+.plan-page .plan-action-bar {
+  height: 68px;
+  padding: 8px 14px;
+  grid-template-columns: .82fr 1.32fr .82fr;
+  gap: 8px;
+  background: rgba(255, 255, 255, .97);
+  border-top-color: rgba(243, 228, 234, .8);
+  box-shadow: 0 -2px 10px rgba(180, 90, 120, .035);
+}
+.plan-page .plan-action-bar button {
+  height: 44px;
+  border-radius: 14px;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.plan-page .plan-secondary-action {
+  border-width: 1px;
+  border-color: #efb5c5;
+}
+.plan-page .plan-primary-action {
+  box-shadow: 0 5px 12px rgba(232, 113, 143, .16);
+}
+.plan-page .plan-action-bar svg {
+  width: 15px;
+  height: 15px;
+}

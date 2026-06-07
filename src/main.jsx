@@ -21,6 +21,7 @@ import {
   Layers,
   Link2,
   Moon,
+  MoreHorizontal,
   PackageCheck,
   Play,
   Plus,
@@ -175,16 +176,20 @@ function BottomNav({ tab, setTab }) {
 }
 
 
-function ResultActionBar({ onCard, onSave }) {
+function PlanActionBar({ onSave, onEdit, onCheckin, saved }) {
   return (
-    <div className="result-action-bar">
-      <button onClick={onCard}>
-        <span><Share2 size={23} strokeWidth={2.6} /></span>
-        <b>生成卡片</b>
+    <div className="plan-action-bar">
+      <button className={`plan-secondary-action ${saved ? 'is-saved' : ''}`} onClick={onSave}>
+        {saved ? <Check size={17} strokeWidth={2.8} /> : <Bookmark size={17} strokeWidth={2.2} />}
+        <span>{saved ? '已保存' : '保存方案'}</span>
       </button>
-      <button onClick={onSave}>
-        <span><Download size={23} strokeWidth={2.6} /></span>
-        <b>保存方案</b>
+      <button className="plan-primary-action" onClick={onEdit}>
+        <Sparkles size={18} strokeWidth={2.4} />
+        <span>AI 调整方案</span>
+      </button>
+      <button className="plan-secondary-action" onClick={onCheckin}>
+        <CalendarCheck size={17} strokeWidth={2.2} />
+        <span>开始打卡</span>
       </button>
     </div>
   );
@@ -433,11 +438,14 @@ function SkinTestPage({ goHome, goPlan }) {
   );
 }
 
-function PlanDetailPage({ goEdit, goHome, single = false }) {
+function PlanDetailPage({ goEdit, goHome, goCheckin, single = false }) {
   const [step, setStep] = useState(1);
-  const [fav, setFav] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [toast, setToast] = useState('');
-  const [openSrc, setOpenSrc] = useState(single ? 1 : null);
+  const [collapsedSources, setCollapsedSources] = useState([]);
+  const [showMore, setShowMore] = useState(false);
+  const [showSavedDialog, setShowSavedDialog] = useState(false);
+  const [showPriceDetails, setShowPriceDetails] = useState(false);
   const scrollerRef = useRef(null);
   const showToast = text => {
     setToast(text);
@@ -465,7 +473,23 @@ function PlanDetailPage({ goEdit, goHome, single = false }) {
   return (
     <main className="page plan-page">
       <StatusBar />
-      <Header title="方案详情" onBack={goHome} />
+      <Header
+        title="方案详情"
+        onBack={goHome}
+        action={(
+          <button className="header-more" onClick={() => setShowMore(!showMore)} aria-label="更多操作">
+            <MoreHorizontal size={24} strokeWidth={2.2} />
+          </button>
+        )}
+      />
+      {showMore && (
+        <div className="plan-more-menu">
+          <button onClick={() => { setShowMore(false); showToast('正在生成分享卡片'); }}>
+            <Share2 size={17} strokeWidth={2.2} />
+            生成分享卡片
+          </button>
+        </div>
+      )}
       <div className="plan-source-tag">
         {single
           ? <><Play size={13} fill="currentColor" strokeWidth={0} /> 来自 {sourceVideos[0].author} 的视频 · 已标注时间轴</>
@@ -491,10 +515,13 @@ function PlanDetailPage({ goEdit, goHome, single = false }) {
               <div className="divider" />
               <div className="product-row">
                 <ProductImage tone={s.tone} />
-                <div>
+                <div className="product-copy">
                   <h3>{s.product}</h3>
                   <p><b>¥{s.price}</b> <span>/ {s.volume}</span></p>
                 </div>
+                <button className="replace-product" onClick={() => showToast(`正在为步骤 ${s.id} 推荐替换产品`)}>
+                  更换此产品 <ChevronRight size={14} strokeWidth={2.5} />
+                </button>
               </div>
               <div className="info-list">
                 {rows.map(([title, content]) => (
@@ -506,11 +533,16 @@ function PlanDetailPage({ goEdit, goHome, single = false }) {
               </div>
               {sources.length > 0 && (
                 <div className="source-block">
-                  <button className="source-toggle" onClick={() => setOpenSrc(openSrc === s.id ? null : s.id)}>
+                  <button
+                    className="source-toggle"
+                    onClick={() => setCollapsedSources(prev => (
+                      prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id]
+                    ))}
+                  >
                     <span><Quote size={14} strokeWidth={2.4} /> {single ? '视频时间轴' : '内容溯源'} · {sources.length} 处</span>
-                    <ChevronDown size={18} className={openSrc === s.id ? 'rot' : ''} />
+                    <ChevronDown size={18} className={!collapsedSources.includes(s.id) ? 'rot' : ''} />
                   </button>
-                  {openSrc === s.id && (
+                  {!collapsedSources.includes(s.id) && (
                     <div className="source-timeline">
                       {sources.map((src, i) => (
                         <div className="tl-item" key={i}>
@@ -526,20 +558,42 @@ function PlanDetailPage({ goEdit, goHome, single = false }) {
                   )}
                 </div>
               )}
-              <div className="action-row">
-                <button className={`ghost-btn ${fav ? 'favorited' : ''}`} onClick={() => setFav(!fav)}><Star size={24} />{fav ? '已收藏' : '收藏'}</button>
-                <button className="primary-btn" onClick={goEdit}>修改方案</button>
-              </div>
             </section>
           );
         })}
       </div>
-      <div className="swipe-hint">← 左右滑动查看 {planSteps.length} 个步骤 →</div>
+      <div className="swipe-hint">左右滑动查看 {planSteps.length} 个步骤</div>
       <section className="card total-card">
         <span>总价预估：<b>¥882</b></span>
-        <button>收起明细 <ChevronUp size={18} /></button>
+        <button onClick={() => setShowPriceDetails(!showPriceDetails)}>
+          {showPriceDetails ? '收起明细' : '展开明细'}
+          {showPriceDetails ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
       </section>
-      <ResultActionBar onCard={() => showToast('正在生成分享卡片')} onSave={() => showToast('方案已保存')} />
+      {showPriceDetails && (
+        <section className="price-details">
+          {planSteps.map(s => <div key={s.id}><span>{s.title}</span><b>¥{s.price}</b></div>)}
+        </section>
+      )}
+      <PlanActionBar
+        saved={saved}
+        onSave={() => { setSaved(true); setShowSavedDialog(true); }}
+        onEdit={goEdit}
+        onCheckin={goCheckin}
+      />
+      {showSavedDialog && (
+        <div className="plan-dialog-mask" onClick={() => setShowSavedDialog(false)}>
+          <section className="plan-saved-dialog" onClick={e => e.stopPropagation()}>
+            <span className="saved-dialog-icon"><Check size={24} strokeWidth={2.8} /></span>
+            <h2>已保存到我的方案</h2>
+            <p>之后可以在「我的方案」中继续查看和调整。</p>
+            <button className="primary-btn" onClick={goCheckin}>开始打卡</button>
+            <button className="dialog-share" onClick={() => { setShowSavedDialog(false); showToast('正在生成分享卡片'); }}>
+              <Share2 size={17} /> 生成分享卡片
+            </button>
+          </section>
+        </div>
+      )}
       {toast && <div className="toast">{toast}</div>}
     </main>
   );
@@ -861,8 +915,8 @@ function ProfilePage({ goPlan, goRecord }) {
   );
 }
 
-function Header({ title, onBack }) {
-  return <header className="header"><button onClick={onBack}><ArrowLeft size={27} /></button><h1>{title}</h1><span /></header>;
+function Header({ title, onBack, action }) {
+  return <header className="header"><button onClick={onBack}><ArrowLeft size={27} /></button><h1>{title}</h1>{action || <span />}</header>;
 }
 
 function App() {
@@ -880,7 +934,7 @@ function App() {
       <div className="phone">
         {screen === 'home' && <HomePage goPlan={goPlan} goSkinTest={() => setScreen('skintest')} />}
         {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goPlan={goPlan} />}
-        {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} single />}
+        {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} goCheckin={() => setScreen('checkin')} single />}
         {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
         {screen === 'checkin' && <CheckinPage goRecord={() => setScreen('record')} />}
         {screen === 'record' && <CheckinRecordPage goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
