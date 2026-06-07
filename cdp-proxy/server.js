@@ -64,6 +64,17 @@ function isTransientEvaluationError(message) {
   );
 }
 
+function isRecoverableNavigationError(message) {
+  const text = message.toLowerCase();
+  return (
+    text.includes("timeout") ||
+    text.includes("net::err") ||
+    text.includes("navigation") ||
+    text.includes("frame was detached") ||
+    text.includes("target closed")
+  );
+}
+
 async function collectPageSnapshot(page) {
   return page.evaluate(() => ({
     title: document.title,
@@ -142,19 +153,35 @@ app.get("/new", requireAuth, async (req, res) => {
     await page.setUserAgent(DEFAULT_USER_AGENT);
     await page.setViewport({ width: 1440, height: 900 });
     page.setDefaultNavigationTimeout(PAGE_TIMEOUT_MS);
-    await page.goto(url, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: PAGE_TIMEOUT_MS });
-    await page.waitForFunction(
-      () => Boolean(document.body && document.documentElement),
-      { timeout: 10000 }
-    ).catch(() => {});
-    if (POST_GOTO_SETTLE_MS > 0) {
-      await sleep(POST_GOTO_SETTLE_MS);
-    }
     const cdpSession = await page.target().createCDPSession();
     await cdpSession.send("Runtime.enable");
     const targetId = crypto.randomUUID();
+    let navigationWarning = null;
+
+    try {
+      await page.goto(url, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: PAGE_TIMEOUT_MS });
+      await page.waitForFunction(
+        () => Boolean(document.body && document.documentElement),
+        { timeout: 10000 }
+      ).catch(() => {});
+      if (POST_GOTO_SETTLE_MS > 0) {
+        await sleep(POST_GOTO_SETTLE_MS);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!isRecoverableNavigationError(message)) {
+        throw error;
+      }
+      navigationWarning = message;
+      console.warn("cdp-proxy /new navigation warning", {
+        targetId,
+        url,
+        warning: message
+      });
+    }
+
     targets.set(targetId, { page, cdpSession });
-    res.json({ targetId });
+    res.json({ targetId, warning: navigationWarning });
   } catch (error) {
     console.error("cdp-proxy /new failed", {
       url,
