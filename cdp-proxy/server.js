@@ -83,6 +83,10 @@ app.get("/new", requireAuth, async (req, res) => {
     targets.set(targetId, { page, cdpSession });
     res.json({ targetId });
   } catch (error) {
+    console.error("cdp-proxy /new failed", {
+      url,
+      error: error instanceof Error ? error.stack || error.message : String(error)
+    });
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
@@ -118,6 +122,11 @@ app.post("/eval", requireAuth, async (req, res) => {
     }
     res.json({ value: result.result?.value ?? null });
   } catch (error) {
+    console.error("cdp-proxy /eval failed", {
+      targetId,
+      scriptPreview: script.slice(0, 500),
+      error: error instanceof Error ? error.stack || error.message : String(error)
+    });
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
 });
