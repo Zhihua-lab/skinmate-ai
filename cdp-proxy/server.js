@@ -14,6 +14,8 @@ const POST_GOTO_SETTLE_MS = Number(process.env.CDP_POST_GOTO_SETTLE_MS || 2500);
 const DEFAULT_USER_AGENT =
   process.env.CDP_USER_AGENT ||
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+const SNAPSHOT_HTML_LIMIT = Number(process.env.CDP_SNAPSHOT_HTML_LIMIT || 200000);
+const SNAPSHOT_TEXT_LIMIT = Number(process.env.CDP_SNAPSHOT_TEXT_LIMIT || 20000);
 
 const app = express();
 app.use(express.text({ type: "*/*", limit: "512kb" }));
@@ -191,7 +193,34 @@ app.post("/eval", requireAuth, async (req, res) => {
           ).catch(() => {});
         }
         const result = await target.cdpSession.send("Runtime.evaluate", {
-          expression: script,
+          expression: looksLikeSnapshotRequest
+            ? `JSON.stringify({
+                title: document.title,
+                url: location.href,
+                text: (document.body?.innerText || "").slice(0, ${SNAPSHOT_TEXT_LIMIT}),
+                videos: [...document.querySelectorAll("video")].map((v) => ({
+                  src: v.src,
+                  currentSrc: v.currentSrc,
+                  poster: v.poster,
+                  duration: Number.isFinite(v.duration) ? v.duration : null,
+                  paused: v.paused,
+                  readyState: v.readyState,
+                  videoWidth: v.videoWidth,
+                  videoHeight: v.videoHeight,
+                  dataset: { ...v.dataset },
+                  attrs: Object.fromEntries([...v.attributes].map((attr) => [attr.name, attr.value]))
+                })),
+                mediaUrls: [...document.querySelectorAll("source, video, a")].map((el) => ({
+                  tag: el.tagName,
+                  src: el.currentSrc || el.src || el.href || "",
+                  attrs: Object.fromEntries([...el.attributes].map((attr) => [attr.name, attr.value]))
+                })).filter((item) => item.src),
+                scripts: [...document.querySelectorAll("script[type='application/json'], script[type='application/ld+json']")]
+                  .map((el) => (el.textContent || "").slice(0, 20000))
+                  .filter(Boolean),
+                html: (document.documentElement?.outerHTML || "").slice(0, ${SNAPSHOT_HTML_LIMIT})
+              })`
+            : script,
           awaitPromise: true,
           returnByValue: true
         });
