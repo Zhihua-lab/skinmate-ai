@@ -224,7 +224,7 @@ export function detectFallbackPlan(inputText) {
     return 'kayn';
   }
 
-  return 'kayn';
+  return null;
 }
 
 export function isValidVideoAnalysis(analysis) {
@@ -313,6 +313,14 @@ export function resolvePlanForDemo(inputText, apiResult, skinResult, defaultStep
     return buildNewbieProductsPlanPackage(skinResult, text);
   }
 
-  console.log('Using fallback Kayn skincare plan');
-  return buildKaynPlanPackage(skinResult, text);
+  if (fallbackPlanId === 'kayn') {
+    console.log('Using fallback Kayn skincare plan');
+    return buildKaynPlanPackage(skinResult, text);
+  }
+
+  console.log('Using default skincare plan');
+  return {
+    steps: defaultSteps,
+    meta: { type: 'default' },
+  };
 }
