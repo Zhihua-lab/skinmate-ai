@@ -7,6 +7,8 @@ const HOST = process.env.HOST || "0.0.0.0";
 const AUTH_TOKEN = process.env.CDP_PROXY_TOKEN || "";
 const PAGE_TIMEOUT_MS = Number(process.env.CDP_PAGE_TIMEOUT_MS || 60000);
 const HEADLESS_MODE = process.env.CDP_HEADLESS || "new";
+const EVAL_RETRY_COUNT = Number(process.env.CDP_EVAL_RETRY_COUNT || 5);
+const EVAL_RETRY_DELAY_MS = Number(process.env.CDP_EVAL_RETRY_DELAY_MS || 750);
 
 const app = express();
 app.use(express.text({ type: "*/*", limit: "512kb" }));
@@ -40,6 +42,21 @@ async function getBrowser() {
     });
   }
   return browserPromise;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientEvaluationError(message) {
+  const text = message.toLowerCase();
+  return (
+    text.includes("context") ||
+    text.includes("execution context") ||
+    text.includes("cannot find context") ||
+    text.includes("inspector error") ||
+    text.includes("target closed")
+  );
 }
 
 async function closeTarget(targetId) {
@@ -76,7 +93,11 @@ app.get("/new", requireAuth, async (req, res) => {
     const browser = await getBrowser();
     const page = await browser.newPage();
     page.setDefaultNavigationTimeout(PAGE_TIMEOUT_MS);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: PAGE_TIMEOUT_MS });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: PAGE_TIMEOUT_MS });
+    await page.waitForFunction(
+      () => Boolean(document.body && document.documentElement),
+      { timeout: 10000 }
+    ).catch(() => {});
     const cdpSession = await page.target().createCDPSession();
     await cdpSession.send("Runtime.enable");
     const targetId = crypto.randomUUID();
@@ -110,17 +131,32 @@ app.post("/eval", requireAuth, async (req, res) => {
   }
 
   try {
-    const result = await target.cdpSession.send("Runtime.evaluate", {
-      expression: script,
-      awaitPromise: true,
-      returnByValue: true
-    });
-    if (result.exceptionDetails) {
-      const text = result.exceptionDetails.text || "Runtime.evaluate failed";
-      const description = result.exceptionDetails.exception?.description || "";
-      throw new Error(description ? `${text}: ${description}` : text);
+    let lastError = null;
+    for (let attempt = 1; attempt <= EVAL_RETRY_COUNT; attempt += 1) {
+      try {
+        const result = await target.cdpSession.send("Runtime.evaluate", {
+          expression: script,
+          awaitPromise: true,
+          returnByValue: true
+        });
+        if (result.exceptionDetails) {
+          const text = result.exceptionDetails.text || "Runtime.evaluate failed";
+          const description = result.exceptionDetails.exception?.description || "";
+          throw new Error(description ? `${text}: ${description}` : text);
+        }
+        res.json({ value: result.result?.value ?? null });
+        return;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt < EVAL_RETRY_COUNT && isTransientEvaluationError(message)) {
+          await sleep(EVAL_RETRY_DELAY_MS);
+          continue;
+        }
+        throw error;
+      }
     }
-    res.json({ value: result.result?.value ?? null });
+    throw lastError || new Error("Runtime.evaluate failed");
   } catch (error) {
     console.error("cdp-proxy /eval failed", {
       targetId,
