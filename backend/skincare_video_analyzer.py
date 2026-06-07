@@ -89,12 +89,15 @@ def extract_video_id(source_url: str) -> str:
 
 
 def extract_douyin_url(text: str) -> str:
-    pattern = re.compile(r"https?://(?:v\.)?douyin\.com/[^\s，。；;!?！？)）]+", re.IGNORECASE)
+    pattern = re.compile(
+        r"https?://(?:[\w-]+\.)?(?:douyin|iesdouyin)\.com/[^\s<>\"'，。；！？，;!)）\]】]+",
+        re.IGNORECASE,
+    )
     match = pattern.search(text)
     if not match:
         raise ValueError("No Douyin URL found in input")
-    return match.group(0).rstrip(".,，。;；!！?？")
-
+    trailing_punctuation = ".,;!?)]}\"'" + "\u3002\uff0c\uff1b\uff01\uff1f\uff09\uff3d\u3011"
+    return match.group(0).rstrip(trailing_punctuation)
 
 def get_llm_provider() -> str:
     provider = os.getenv("LLM_PROVIDER", "").strip().lower() or "dashscope"

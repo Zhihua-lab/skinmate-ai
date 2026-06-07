@@ -31,6 +31,21 @@ class SkincareVideoAnalyzerTests(unittest.TestCase):
 
         self.assertEqual(extract_douyin_url(text), "https://v.douyin.com/rP_8KuKlp8k/")
 
+    def test_extracts_douyin_url_from_common_full_link_formats(self):
+        from skincare_video_analyzer import extract_douyin_url
+
+        cases = [
+            "https://www.douyin.com/video/7618999660313719715",
+            "https://www.douyin.com/search/%E6%8A%A4%E8%82%A4?modal_id=7597309249148046602&type=general",
+            "https://m.douyin.com/share/video/7612231330385972514",
+            "https://www.iesdouyin.com/share/video/7612231330385972514/?region=CN",
+        ]
+
+        for url in cases:
+            with self.subTest(url=url):
+                text = f"copy this link {url}\uff0copen Douyin"
+
+                self.assertEqual(extract_douyin_url(text), url)
     def test_extracts_douyin_url_rejects_text_without_link(self):
         from skincare_video_analyzer import extract_douyin_url
 
