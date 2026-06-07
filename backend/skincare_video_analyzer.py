@@ -284,6 +284,13 @@ def parse_cdp_eval_response(payload: dict[str, Any]) -> dict[str, Any]:
     raise ValueError("CDP eval response did not contain a JSON object")
 
 
+def format_cdp_proxy_error(exc: Exception, *, proxy_url: str) -> RuntimeError:
+    return RuntimeError(
+        "视频抓取服务未启动或不可访问，请检查 CDP_ENDPOINT。"
+        f" 当前配置: {proxy_url}. 原始错误: {exc}"
+    )
+
+
 def fetch_douyin_snapshot_with_cdp(
     source_url: str,
     *,
@@ -294,9 +301,12 @@ def fetch_douyin_snapshot_with_cdp(
 ) -> dict[str, Any]:
     client = session or requests.Session()
     target_id = ""
-    new_response = client.get(f"{proxy_url}/new?url={quote(source_url, safe='')}", timeout=60)
-    new_response.raise_for_status()
-    target_id = str(new_response.json()["targetId"])
+    try:
+        new_response = client.get(f"{proxy_url}/new?url={quote(source_url, safe='')}", timeout=60)
+        new_response.raise_for_status()
+        target_id = str(new_response.json()["targetId"])
+    except requests.RequestException as exc:
+        raise format_cdp_proxy_error(exc, proxy_url=proxy_url) from exc
 
     script = (
         "JSON.stringify({"
@@ -321,9 +331,12 @@ def fetch_douyin_snapshot_with_cdp(
         for _ in range(attempts):
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
-            eval_response = client.post(f"{proxy_url}/eval?target={target_id}", data=script, timeout=30)
-            eval_response.raise_for_status()
-            snapshot = parse_cdp_eval_response(eval_response.json())
+            try:
+                eval_response = client.post(f"{proxy_url}/eval?target={target_id}", data=script, timeout=30)
+                eval_response.raise_for_status()
+                snapshot = parse_cdp_eval_response(eval_response.json())
+            except requests.RequestException as exc:
+                raise format_cdp_proxy_error(exc, proxy_url=proxy_url) from exc
             last_snapshot = snapshot
             if extract_video_sources_from_snapshot(snapshot):
                 return snapshot
@@ -332,8 +345,11 @@ def fetch_douyin_snapshot_with_cdp(
         raise RuntimeError("CDP did not return a Douyin page snapshot")
     finally:
         if target_id:
-            close_response = client.get(f"{proxy_url}/close?target={target_id}", timeout=10)
-            close_response.raise_for_status()
+            try:
+                close_response = client.get(f"{proxy_url}/close?target={target_id}", timeout=10)
+                close_response.raise_for_status()
+            except requests.RequestException:
+                pass
 
 
 def download_douyin_video_with_cdp(
