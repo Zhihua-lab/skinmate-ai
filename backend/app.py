@@ -1,7 +1,9 @@
+import json
 import os
 from pathlib import Path
 from typing import Any
 
+import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +11,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-from skincare_video_analyzer import get_llm_api_key
+from skincare_video_analyzer import build_llm_headers, get_llm_api_key, get_llm_chat_url
 from skincare_web_app import run_url_analysis
 
 app = FastAPI(title="Skincare AI Backend", version="1.0.0")
@@ -24,6 +26,13 @@ app.add_middleware(
 
 class AnalyzeVideoRequest(BaseModel):
     url: str
+
+
+class RevisePlanRequest(BaseModel):
+    plan: list[dict[str, Any]]
+    instruction: str
+    chat_history: list[dict[str, str]] | None = None
+    plan_meta: dict[str, Any] | None = None
 
 
 def build_markdown_summary(result: dict[str, Any]) -> str:
@@ -81,6 +90,69 @@ def json_safe(value: Any) -> str:
     return str(value)
 
 
+def build_revise_plan_prompt(
+    *,
+    plan: list[dict[str, Any]],
+    instruction: str,
+    chat_history: list[dict[str, str]] | None = None,
+    plan_meta: dict[str, Any] | None = None,
+) -> str:
+    return (
+        "你是一名护肤方案调整助手。"
+        "用户已经有一份现成的护肤方案，你需要根据用户的新要求微调方案，而不是重新做问卷。"
+        "请优先沿用原方案中的步骤结构，只在必要时增删步骤。"
+        "如果用户提到预算高、太刺激、步骤太多、想更保湿、想更温和、想换产品，你要给出具体调整。"
+        "输出必须是严格 JSON，不要 Markdown，不要额外解释。"
+        '顶层字段必须是 {"assistant_reply": string, "plan": Step[]}。'
+        "每个 Step 必须包含这些字段：id, label, title, description, product, price, volume, tone, benefits, ingredients, usage, sources。"
+        "benefits、ingredients、sources 必须是数组。sources 每项必须包含 v, time, quote。"
+        f"当前方案：{json.dumps(plan, ensure_ascii=False)}"
+        f"方案元信息：{json.dumps(plan_meta or {}, ensure_ascii=False)}"
+        f"历史对话：{json.dumps(chat_history or [], ensure_ascii=False)}"
+        f"用户这次的修改要求：{instruction}"
+    )
+
+
+def request_revised_plan(
+    *,
+    plan: list[dict[str, Any]],
+    instruction: str,
+    chat_history: list[dict[str, str]] | None = None,
+    plan_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "model": os.getenv("LLM_MODEL") or os.getenv("DASHSCOPE_MODEL") or "deepseek-v4-flash",
+        "messages": [
+            {
+                "role": "user",
+                "content": build_revise_plan_prompt(
+                    plan=plan,
+                    instruction=instruction,
+                    chat_history=chat_history,
+                    plan_meta=plan_meta,
+                ),
+            }
+        ],
+        "temperature": 0.3,
+        "response_format": {"type": "json_object"},
+    }
+
+    response = requests.post(
+        get_llm_chat_url(),
+        headers=build_llm_headers(),
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        timeout=120,
+    )
+    response.raise_for_status()
+    data = response.json()
+    content = data["choices"][0]["message"]["content"]
+    parsed = json.loads(content)
+
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("plan"), list):
+        raise ValueError("LLM did not return a valid revised plan payload")
+    return parsed
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     try:
@@ -114,4 +186,33 @@ def analyze_video(payload: AnalyzeVideoRequest) -> dict[str, Any]:
         "video_id": result.get("video_id", ""),
         "markdown": build_markdown_summary(result),
         "analysis": result,
+    }
+
+
+@app.post("/revise-plan")
+def revise_plan(payload: RevisePlanRequest) -> dict[str, Any]:
+    try:
+        get_llm_api_key()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if not payload.plan:
+        raise HTTPException(status_code=400, detail="plan is required")
+    if not payload.instruction.strip():
+        raise HTTPException(status_code=400, detail="instruction is required")
+
+    try:
+        result = request_revised_plan(
+            plan=payload.plan,
+            instruction=payload.instruction.strip(),
+            chat_history=payload.chat_history,
+            plan_meta=payload.plan_meta,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "assistant_reply": str(result.get("assistant_reply") or ""),
+        "plan": result["plan"],
     }

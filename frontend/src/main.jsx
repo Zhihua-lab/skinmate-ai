@@ -47,6 +47,7 @@ import {
 import { CHECKIN_BUCKET, supabase } from './lib/supabase';
 import './styles.css';
 import { analyzeVideoUrl, buildPlanFromAnalysis, extractDouyinUrl } from './videoAnalysis';
+import { revisePlan } from './planEditApi';
 
 const LOCAL_CHECKIN_KEY = 'fuji-today-checkin';
 const PENDING_DOUYIN_LINK_KEY = 'pendingDouyinLink';
@@ -961,6 +962,7 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
   const [progress, setProgress] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
+  const [parseError, setParseError] = useState('');
   const videoRef = useRef(null);
   const onCompleteRef = useRef(onComplete);
 
@@ -974,6 +976,7 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
     let cancelled = false;
     let apiResult = null;
     let apiError = null;
+    setParseError('');
 
     const progressTimer = setInterval(() => {
       setProgress(prev => {
@@ -1026,15 +1029,11 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
       }
 
       if (apiError && !apiResult) {
-        console.warn('Video parse fell back to mock plan.', apiError);
+        console.warn('Video parse failed.', apiError);
       }
-
-      finish(generatePlanFromLink(sourceLink), {
-        sourceUrl: sourceLink,
-        videoId: '',
-        single: true,
-        mock: true,
-      });
+      setParseError(
+        apiError?.message || '后端未返回有效解析结果，请稍后重试。',
+      );
     };
 
     run();
@@ -1105,6 +1104,7 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
           <span className="parsing-progress-bar" style={{ width: `${Math.min(100, progress)}%` }} />
         </div>
         <span className="parsing-progress-label">{Math.round(Math.min(100, progress))}%</span>
+        {parseError && <p className="import-error">{parseError}</p>}
       </section>
 
       <p className="parsing-footnote">视频内容较长时，解析可能需要几十秒，请保持页面打开</p>
@@ -1306,9 +1306,10 @@ function isAdjustRequest(text) {
   return editAdjustKeywords.some(kw => text.includes(kw));
 }
 
-function EditPlanPage({ goPlan }) {
+function EditPlanPage({ goPlan, currentPlan = planSteps, currentPlanMeta = null, onPlanUpdated }) {
   const [messages, setMessages] = useState(editInitialMessages);
   const [input, setInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const chatRef = useRef(null);
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
@@ -1340,6 +1341,50 @@ function EditPlanPage({ goPlan }) {
     });
     setInput('');
   };
+  const sendReal = async (text = input) => {
+    if (!text.trim() || isSending) return;
+    const now = new Date();
+    const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const trimmed = text.trim();
+    const userMsg = { id: nextEditMsgId(), type: 'user', text: trimmed, time };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsSending(true);
+
+    try {
+      const chatHistory = messages.map(message => ({
+        role: message.type === 'user' ? 'user' : 'assistant',
+        text: message.text || '',
+      }));
+      const result = await revisePlan({
+        plan: currentPlan,
+        instruction: trimmed,
+        chatHistory,
+        planMeta: currentPlanMeta,
+      });
+      const price = result.plan.reduce((sum, step) => (
+        Number.isFinite(Number(step.price)) ? sum + Number(step.price) : sum
+      ), 0);
+      setMessages(prev => [
+        ...prev,
+        { id: nextEditMsgId(), type: 'ai', text: result.assistantReply, time },
+        { id: nextEditMsgId(), type: 'plan', steps: result.plan.length, price, nextPlan: result.plan },
+      ]);
+      onPlanUpdated?.(result.plan);
+    } catch (error) {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: nextEditMsgId(),
+          type: 'ai',
+          text: error?.message || '调整失败了，请稍后重试。',
+          time,
+        },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  };
   return (
     <main className="page edit-page">
       <Header title="修改方案" onBack={goPlan} />
@@ -1368,7 +1413,7 @@ function EditPlanPage({ goPlan }) {
                   <p>已调整 {msg.steps} 个步骤</p>
                   <em>总价预估：¥{msg.price}</em>
                 </div>
-                <button className="edit-plan-btn" onClick={goPlan}>
+                <button className="edit-plan-btn" onClick={() => goPlan(msg.nextPlan || currentPlan, currentPlanMeta)}>
                   查看新方案 <ChevronRight size={15} strokeWidth={2.6} />
                 </button>
               </div>
@@ -1404,7 +1449,7 @@ function EditPlanPage({ goPlan }) {
       <footer className="edit-footer">
         <div className="edit-chips">
           {editQuickChips.map(([label, Icon]) => (
-            <button key={label} onClick={() => send(label)}>
+            <button key={label} onClick={() => sendReal(label)} disabled={isSending}>
               <Icon size={14} strokeWidth={2.2} />
               {label}
             </button>
@@ -1415,10 +1460,11 @@ function EditPlanPage({ goPlan }) {
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && send()}
+            onKeyDown={e => e.key === 'Enter' && sendReal()}
+            disabled={isSending}
             placeholder="告诉肤记你想怎么调整..."
           />
-          <button className="edit-send-btn" onClick={() => send()} aria-label="发送">
+          <button className="edit-send-btn" onClick={() => sendReal()} aria-label="send" disabled={isSending}>
             <Send size={18} strokeWidth={2.4} />
           </button>
         </div>
@@ -1976,7 +2022,14 @@ function App() {
             single
           />
         )}
-        {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
+        {screen === 'edit' && (
+          <EditPlanPage
+            goPlan={goPlan}
+            currentPlan={activePlan || savedGeneratedPlan?.plan || planSteps}
+            currentPlanMeta={planMeta || savedGeneratedPlan?.meta}
+            onPlanUpdated={plan => setActivePlan(plan)}
+          />
+        )}
         {screen === 'checkin' && <CheckinPage record={checkinRecord} onSave={saveCheckin} onReset={resetCheckin} goRecord={() => setScreen('record')} />}
         {screen === 'record' && <CheckinRecordPage record={checkinRecord} goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
         {screen === 'ranking' && <RankingPage />}
