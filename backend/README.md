@@ -35,6 +35,7 @@ DASHSCOPE_API_KEY=
 DASHSCOPE_MODEL=qwen3-vl-flash
 OUTPUT_DIR=skincare_outputs
 CDP_ENDPOINT=http://localhost:3456
+CDP_PROXY_TOKEN=
 ```
 
 ## Local Run
@@ -63,6 +64,7 @@ uvicorn app:app --host 0.0.0.0 --port $PORT
    - `DASHSCOPE_MODEL`
    - `OUTPUT_DIR`
    - `CDP_ENDPOINT`
+   - `CDP_PROXY_TOKEN`
 5. 启动命令设置为：
 
 ```bash
@@ -75,7 +77,8 @@ uvicorn app:app --host 0.0.0.0 --port $PORT
 
 ## Deployment Risk
 
-当前抖音链接解析依赖本地或外部可访问的 Chrome CDP 服务，默认使用 `CDP_ENDPOINT=http://localhost:3456`。
+当前抖音链接解析依赖本地或外部可访问的 Chrome CDP 服务，默认使用 `CDP_ENDPOINT=http://localhost:3456
+CDP_PROXY_TOKEN=`。
 
 如果 Railway / Render 上没有可访问的 Chrome CDP 服务，抖音链接解析和视频下载可能失败。
 

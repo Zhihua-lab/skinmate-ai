@@ -11,7 +11,7 @@ This service provides the HTTP CDP proxy endpoints expected by the Python backen
 ## Environment Variables
 
 - `PORT`: listen port, default `3456`
-- `CDP_PROXY_TOKEN`: optional bearer token for proxy auth
+- `CDP_PROXY_TOKEN`: optional bearer token for proxy auth; set the same value in the backend service
 - `CDP_PAGE_TIMEOUT_MS`: page navigation timeout, default `60000`
 - `CDP_HEADLESS`: Puppeteer headless mode, default `new`
 
@@ -38,4 +38,5 @@ After deploy, update the backend Railway service variable:
 
 ```text
 CDP_ENDPOINT=https://your-cdp-proxy-domain
+CDP_PROXY_TOKEN=<same-random-secret>
 ```

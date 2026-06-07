@@ -269,5 +269,34 @@ class SkincareVideoAnalyzerTests(unittest.TestCase):
         session.post.assert_called_once()
 
 
+    @patch.dict("os.environ", {"CDP_PROXY_TOKEN": "secret-token"})
+    def test_fetch_douyin_snapshot_sends_cdp_proxy_auth_header(self):
+        from skincare_video_analyzer import fetch_douyin_snapshot_with_cdp
+
+        new_response = Mock()
+        new_response.json.return_value = {"targetId": "target-1"}
+        new_response.raise_for_status.return_value = None
+        eval_response = Mock()
+        eval_response.json.return_value = {"value": '{"text":"copy","videos":[{"currentSrc":"https://v26.douyinvod.com/video.mp4"}]}' }
+        eval_response.raise_for_status.return_value = None
+        close_response = Mock()
+        close_response.raise_for_status.return_value = None
+        session = Mock()
+        session.get.side_effect = [new_response, close_response]
+        session.post.return_value = eval_response
+
+        fetch_douyin_snapshot_with_cdp(
+            "https://www.douyin.com/video/1234567890123456789",
+            session=session,
+            attempts=1,
+            wait_seconds=0,
+        )
+
+        expected_headers = {"Authorization": "Bearer secret-token"}
+        self.assertEqual(session.get.call_args_list[0].kwargs["headers"], expected_headers)
+        self.assertEqual(session.post.call_args.kwargs["headers"], expected_headers)
+        self.assertEqual(session.get.call_args_list[1].kwargs["headers"], expected_headers)
+
+
 if __name__ == "__main__":
     unittest.main()

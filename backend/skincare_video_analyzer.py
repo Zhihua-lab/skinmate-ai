@@ -130,6 +130,13 @@ def build_llm_headers() -> dict[str, str]:
     }
 
 
+def build_cdp_headers() -> dict[str, str]:
+    token = (os.getenv("CDP_PROXY_TOKEN") or os.getenv("CDP_TOKEN") or "").strip()
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
+
+
 def encode_image(path: Path, max_edge: int = 1280) -> str:
     with Image.open(path) as image:
         image = image.convert("RGB")
@@ -301,8 +308,9 @@ def fetch_douyin_snapshot_with_cdp(
 ) -> dict[str, Any]:
     client = session or requests.Session()
     target_id = ""
+    headers = build_cdp_headers()
     try:
-        new_response = client.get(f"{proxy_url}/new?url={quote(source_url, safe='')}", timeout=60)
+        new_response = client.get(f"{proxy_url}/new?url={quote(source_url, safe='')}", headers=headers, timeout=60)
         new_response.raise_for_status()
         target_id = str(new_response.json()["targetId"])
     except requests.RequestException as exc:
@@ -332,7 +340,7 @@ def fetch_douyin_snapshot_with_cdp(
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
             try:
-                eval_response = client.post(f"{proxy_url}/eval?target={target_id}", data=script, timeout=30)
+                eval_response = client.post(f"{proxy_url}/eval?target={target_id}", headers=headers, data=script, timeout=30)
                 eval_response.raise_for_status()
                 snapshot = parse_cdp_eval_response(eval_response.json())
             except requests.RequestException as exc:
@@ -346,7 +354,7 @@ def fetch_douyin_snapshot_with_cdp(
     finally:
         if target_id:
             try:
-                close_response = client.get(f"{proxy_url}/close?target={target_id}", timeout=10)
+                close_response = client.get(f"{proxy_url}/close?target={target_id}", headers=headers, timeout=10)
                 close_response.raise_for_status()
             except requests.RequestException:
                 pass
