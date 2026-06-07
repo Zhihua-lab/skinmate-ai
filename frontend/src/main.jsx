@@ -301,139 +301,223 @@ function HomePage({ goPlan, goSkinTest }) {
   );
 }
 
-function SkinTestPage({ goHome, goPlan }) {
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const [flash, setFlash] = useState(false);
-  const [facingMode, setFacingMode] = useState('user');
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraError, setCameraError] = useState('');
-  const [toast, setToast] = useState('');
-  const showToast = text => {
-    setToast(text);
-    setTimeout(() => setToast(''), 1600);
+const skinQuiz = [
+  {
+    title: '洁面后 1 小时，你的皮肤状态如何？',
+    options: [
+      ['A', '明显紧绷，甚至有起皮感', '洗完脸后不舒服，笑的时候脸发紧，秋冬容易脱皮', { dryScore: 3 }],
+      ['B', '略微紧绷，但还能接受', '偶尔觉得干，两颊容易缺水', { combinationDryScore: 2, normalScore: 1 }],
+      ['C', '基本舒适，没有明显感觉', '不干不油，状态比较稳定', { normalScore: 3 }],
+      ['D', '开始有一点油光', '鼻头微微泛油，T 区有油感', { combinationOilyScore: 2 }],
+      ['E', '全脸明显出油', '额头发亮，鼻子容易出油', { oilyScore: 3 }],
+    ],
+  },
+  {
+    title: '中午 12 点左右，你的皮肤状态通常是？',
+    options: [
+      ['A', '仍然比较干', '', { dryScore: 3 }],
+      ['B', '鼻子和额头轻微出油', '', { normalScore: 2, combinationDryScore: 1 }],
+      ['C', 'T 区明显出油，两颊正常', '', { combinationOilyScore: 3 }],
+      ['D', 'T 区出油，两颊偏干', '', { combinationScore: 3 }],
+      ['E', '全脸油光明显', '', { oilyScore: 3 }],
+    ],
+  },
+  {
+    title: '过去三个月，你长痘情况如何？',
+    options: [
+      ['A', '基本不长痘', '', { acneScore: 0 }],
+      ['B', '偶尔冒出 1-2 颗', '', { acneScore: 1 }],
+      ['C', '经常长闭口', '额头颗粒感，下巴闭口', { acneScore: 2 }],
+      ['D', '经常长红肿痘', '', { acneScore: 3 }],
+      ['E', '痘痘反复出现', '', { acneScore: 4 }],
+    ],
+  },
+  {
+    title: '是否经常出现以下情况？',
+    hint: '使用新产品刺痛、脸颊泛红、换季容易过敏、发热发痒、红血丝明显',
+    options: [
+      ['A', '一个都没有', '', { sensitiveScore: 0 }],
+      ['B', '偶尔出现 1 项', '', { sensitiveScore: 1 }],
+      ['C', '经常出现 1-2 项', '', { sensitiveScore: 2 }],
+      ['D', '经常出现 3 项以上', '', { sensitiveScore: 4 }],
+      ['E', '几乎一直存在', '', { sensitiveScore: 5 }],
+    ],
+  },
+];
+
+const skinProfiles = {
+  dryScore: { name: '干性皮肤', features: ['容易缺水', '容易起皮', '毛孔细小'], keywords: ['补水', '保湿', '修护'] },
+  oilyScore: { name: '油性皮肤', features: ['毛孔粗大', '容易长痘', '容易脱妆'], keywords: ['控油', '清洁', '维稳'] },
+  normalScore: { name: '中性皮肤', features: ['水油平衡', '状态稳定'], keywords: ['维持', '防晒'] },
+  combinationDryScore: { name: '混干皮肤', features: ['两颊偏干', 'T 区正常'], keywords: ['补水', '修护'] },
+  combinationOilyScore: { name: '混油皮肤', features: ['T 区出油明显', '两颊正常'], keywords: ['控油', '补水'] },
+  combinationScore: { name: '混合性皮肤', features: ['T 区出油', '两颊偏干'], keywords: ['分区护理', '补水', '维稳'] },
+};
+
+function calculateSkinResult(answers) {
+  const scores = {
+    dryScore: 0, oilyScore: 0, normalScore: 0, combinationDryScore: 0,
+    combinationOilyScore: 0, combinationScore: 0, acneScore: 0, sensitiveScore: 0,
   };
-  const stopStream = () => {
-    streamRef.current?.getTracks().forEach(track => track.stop());
-    streamRef.current = null;
-  };
-  const startCamera = async facing => {
-    stopStream();
-    setCameraReady(false);
-    setCameraError('');
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('当前浏览器不支持摄像头');
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: facing,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
-        await video.play();
-      }
-      setCameraReady(true);
-    } catch (err) {
-      const msg = err.name === 'NotAllowedError'
-        ? '请允许浏览器使用摄像头权限'
-        : err.name === 'NotFoundError'
-          ? '未检测到可用摄像头'
-          : err.message || '无法打开摄像头';
-      setCameraError(msg);
-      showToast(msg);
-    }
-  };
-  useEffect(() => {
-    startCamera(facingMode);
-    return stopStream;
-  }, [facingMode]);
-  const toggleCamera = () => {
-    setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
-    showToast('已切换摄像头');
-  };
+  answers.forEach((answer, index) => {
+    const points = skinQuiz[index].options.find(option => option[0] === answer)?.[3] || {};
+    Object.entries(points).forEach(([key, value]) => { scores[key] += value; });
+  });
+  const baseKeys = Object.keys(skinProfiles);
+  const baseKey = baseKeys.reduce((best, key) => scores[key] > scores[best] ? key : best, baseKeys[0]);
+  let skinType = skinProfiles[baseKey].name;
+  if (baseKey === 'oilyScore' && scores.sensitiveScore >= 2) skinType = '油敏肌';
+  else if (baseKey === 'dryScore' && scores.sensitiveScore >= 2) skinType = '干敏肌';
+  else if (baseKey === 'oilyScore' && scores.combinationOilyScore >= scores.oilyScore - 1) skinType = '混合偏油肌';
+  else if (baseKey === 'dryScore' && scores.combinationDryScore >= scores.dryScore - 1) skinType = '混合偏干肌';
+  else if (baseKey === 'combinationOilyScore') skinType = '混合偏油肌';
+  else if (baseKey === 'combinationDryScore') skinType = '混合偏干肌';
+  const sensitiveLevel = scores.sensitiveScore <= 1 ? '非敏感肌' : scores.sensitiveScore === 2 ? '轻度敏感肌' : scores.sensitiveScore <= 4 ? '中度敏感肌' : '重度敏感肌';
+  const acneLevel = ['低', '轻度', '中等', '较高'][scores.acneScore] || '高';
+  const keywords = [...skinProfiles[baseKey].keywords];
+  if (scores.sensitiveScore >= 2) keywords.push('屏障修护', '温和低刺激');
+  if (scores.acneScore >= 2) keywords.push('控油', '减少刺激', '清洁维稳');
+  return { scores, baseKey, skinType, sensitiveLevel, acneLevel, features: skinProfiles[baseKey].features, keywords: [...new Set(keywords)] };
+}
+
+function SkinFlowHeader({ title, onBack }) {
+  return <><StatusBar /><Header title={title} onBack={onBack} /></>;
+}
+
+function SkinTestPage({ goHome, goScan }) {
   return (
-    <main className="page skintest-page">
-      <StatusBar />
-      <header className="skintest-header">
-        <button className="st-logo" onClick={goHome}>肤记<Sparkles size={11} className="brand-spark-sm" /></button>
-        <h1>拍照测肤</h1>
-        <button className="st-help" onClick={() => showToast('请将脸部移入圆框，保持光线充足')}>
-          <HelpCircle size={15} strokeWidth={2.2} /> 测肤说明
-        </button>
-      </header>
-
-      <section className="camera-card">
-        <button
-          className={`cam-ctrl ${flash ? 'on' : ''}`}
-          onClick={() => {
-            setFlash(!flash);
-            showToast('网页端暂不支持闪光灯');
-          }}
-        >
-          <Zap size={18} strokeWidth={2.2} fill={flash ? 'currentColor' : 'none'} />
-          <em>闪光灯</em>
-        </button>
-        <div className="cam-status"><i />{cameraReady ? '实时分析中' : '准备中'}</div>
-        <button className="cam-ctrl" onClick={toggleCamera}>
-          <Camera size={18} strokeWidth={2.2} />
-          <em>切换摄像头</em>
-        </button>
-
-        <div className="cam-feed">
-          <video
-            ref={videoRef}
-            className={`cam-video ${facingMode === 'user' ? 'mirror' : ''} ${cameraReady ? 'ready' : ''}`}
-            playsInline
-            muted
-            autoPlay
-          />
-          {!cameraReady && !cameraError && <div className="cam-overlay cam-loading">正在启动摄像头…</div>}
-          {cameraError && (
-            <div className="cam-overlay cam-error">
-              <p>{cameraError}</p>
-              <button type="button" onClick={() => startCamera(facingMode)}>重试</button>
-            </div>
-          )}
-          <div className="face-frame" />
-          <span className="cam-hint">
-            {cameraReady ? '请将脸部移入圆框' : cameraError ? '请检查权限后重试' : '正在请求摄像头权限'}
-          </span>
-        </div>
-
-        <div className="metrics-card">
-          {skinMetrics.map(m => (
-            <div className="metric" key={m.key}>
-              <span className="metric-head"><m.Icon size={15} strokeWidth={2.2} />{m.label}</span>
-              <strong className="metric-value">{m.value}<small>%</small></strong>
-              <span className="metric-bar"><i style={{ width: `${m.value}%` }} /></span>
-              <em className="metric-status">{m.status}</em>
-            </div>
-          ))}
-        </div>
+    <main className="page skin-flow-page skin-start-page">
+      <SkinFlowHeader title="AI 智能测肤" onBack={goHome} />
+      <section className="skin-flow-intro">
+        <span className="skin-kicker"><Sparkles size={14} /> 30 秒轻量测试</span>
+        <h2>拍照识别 + 4 个问题<br />生成你的护肤画像</h2>
+        <p>先识别当前状态，再通过日常感受校准结果。</p>
       </section>
-
-      <section className="card judge-card">
-        <span className="judge-icon"><Smile size={24} strokeWidth={2.2} /></span>
-        <div className="judge-text">
-          <b>当前判断：混油肌</b>
-          <p>T区油脂分泌较旺盛，两颊轻微缺水</p>
-        </div>
-        <button className="judge-detail" onClick={() => showToast('混油肌：T区偏油、两颊偏干，护理需分区')}>
-          查看详情 <ChevronRight size={14} strokeWidth={2.6} />
-        </button>
+      <section className="card skin-photo-card">
+        <div className="skin-face-visual"><Camera size={38} strokeWidth={1.7} /><i /><i /><i /></div>
+        <h3>先拍一张脸部照片</h3>
+        <p>AI 会先识别你的出油、泛红、痘痘等状态，再通过几个问题校准结果。</p>
+        <button className="primary-btn" onClick={goScan}><Camera size={18} /> 开始拍照测肤</button>
       </section>
+      <p className="skin-disclaimer">仅用于护肤建议，不作为医学诊断依据。</p>
+    </main>
+  );
+}
 
-      <p className="reco-note"><Heart size={14} fill="#f6a6bc" strokeWidth={0} /> 确认后为你推荐合适的抖音护肤视频</p>
+function SkinScanPage({ goBack, goQuiz }) {
+  const findings = ['T 区略有油光', '两颊状态较稳定', '下巴区域有轻微闭口风险', '面部有轻微泛红迹象'];
+  return (
+    <main className="page skin-flow-page">
+      <SkinFlowHeader title="AI 初步识别" onBack={goBack} />
+      <section className="skin-scan-hero">
+        <div className="scan-face"><Sparkles size={30} /><span>AI</span></div>
+        <h2>识别完成</h2>
+        <p>AI 初步识别到以下皮肤状态</p>
+      </section>
+      <section className="card skin-findings">
+        {findings.map((item, index) => <div key={item}><span>{index + 1}</span><p>{item}</p><Check size={16} /></div>)}
+      </section>
+      <div className="skin-calibrate-note"><Sparkles size={16} /><p>再回答 4 个问题，让推荐更准确。</p></div>
+      <button className="primary-btn skin-flow-main-btn" onClick={goQuiz}>继续校准肤质 <ChevronRight size={17} /></button>
+    </main>
+  );
+}
 
-      <button className="primary-btn confirm-skin" onClick={goPlan}>确认结果，推荐视频</button>
-      {toast && <div className="toast">{toast}</div>}
+function SkinQuizPage({ goBack, onComplete }) {
+  const [question, setQuestion] = useState(0);
+  const [answers, setAnswers] = useState([]);
+  const selected = answers[question];
+  const choose = value => setAnswers(prev => {
+    const next = [...prev];
+    next[question] = value;
+    return next;
+  });
+  const next = () => {
+    if (!selected) return;
+    if (question === skinQuiz.length - 1) onComplete(calculateSkinResult(answers));
+    else setQuestion(question + 1);
+  };
+  const current = skinQuiz[question];
+  return (
+    <main className="page skin-flow-page skin-quiz-page">
+      <SkinFlowHeader title="肤质校准" onBack={question === 0 ? goBack : () => setQuestion(question - 1)} />
+      <div className="quiz-progress"><span>{question + 1} / 4</span><i><b style={{ width: `${(question + 1) * 25}%` }} /></i></div>
+      <section className="quiz-question">
+        <span className="skin-kicker">问题 {question + 1}</span>
+        <h2>{current.title}</h2>
+        {current.hint && <p>{current.hint}</p>}
+      </section>
+      <section className="quiz-options">
+        {current.options.map(([key, label, desc]) => (
+          <button className={selected === key ? 'selected' : ''} key={key} onClick={() => choose(key)}>
+            <span>{key}</span><div><b>{label}</b>{desc && <p>{desc}</p>}</div>{selected === key && <Check size={16} />}
+          </button>
+        ))}
+      </section>
+      <button className="primary-btn skin-flow-main-btn" disabled={!selected} onClick={next}>
+        {question === 3 ? '生成护肤画像' : '下一题'} <ChevronRight size={17} />
+      </button>
+    </main>
+  );
+}
+
+function SkinResultPage({ result, goRecommendations, restart }) {
+  const analysis = `你的皮肤属于${result.skinType}。结合拍照识别，T 区有轻微油光，两颊状态相对稳定。当前敏感等级为${result.sensitiveLevel}，痘痘风险为${result.acneLevel}，建议优先选择温和、稳定且容易坚持的护理路线。`;
+  return (
+    <main className="page skin-flow-page skin-result-page">
+      <SkinFlowHeader title="你的护肤画像" onBack={restart} />
+      <section className="skin-result-hero">
+        <span><Sparkles size={17} /> AI 已完成综合分析</span>
+        <h2>{result.skinType}</h2>
+        <p>{result.features.join(' · ')}</p>
+      </section>
+      <section className="card result-summary-grid">
+        <div><span>肤质</span><b>{result.skinType}</b></div>
+        <div><span>敏感等级</span><b>{result.sensitiveLevel}</b></div>
+        <div><span>痘痘风险</span><b>{result.acneLevel}</b></div>
+      </section>
+      <section className="card result-analysis"><h3><Sparkles size={16} /> AI 分析</h3><p>{analysis}</p></section>
+      <section className="result-focus"><h3>当前护肤重点</h3><div>{result.keywords.map(k => <span key={k}>{k}</span>)}</div></section>
+      <section className="skin-plan-tip"><CalendarCheck size={18} /><p>建议建立早晚护肤打卡计划，坚持 21 天观察改善效果。</p></section>
+      <button className="primary-btn skin-flow-main-btn" onClick={goRecommendations}>查看推荐方案 <ChevronRight size={17} /></button>
+      <button className="skin-restart" onClick={restart}>重新测试</button>
+    </main>
+  );
+}
+
+const recommendationSets = {
+  oily: [
+    ['油敏肌温和控油方案', ['控油', '舒缓', '修护'], 'T 区出油、偶尔泛红、闭口反复', 398],
+    ['熬夜闭口修护方案', ['闭口', '维稳', '补水'], '下巴闭口、作息不规律、屏障不稳定', 268],
+    ['温和清洁维稳方案', ['清洁', '控油', '低刺激'], '油光明显、容易闷痘、不适合猛药护肤', 198],
+  ],
+  dry: [
+    ['干敏肌屏障修护方案', ['补水', '保湿', '修护'], '两颊干燥、起皮、换季不稳定', 298],
+    ['秋冬高保湿护理方案', ['保湿', '滋润', '维稳'], '洁面后紧绷、干纹明显、容易起皮', 368],
+    ['温和低刺激入门方案', ['敏感', '修护', '精简'], '新产品刺痛、泛红、屏障脆弱', 228],
+  ],
+  normal: [
+    ['日常维稳基础方案', ['维持', '防晒', '保湿'], '状态稳定、想保持水油平衡', 198],
+    ['轻抗氧提亮方案', ['提亮', '维稳', '防晒'], '暗沉、熬夜、想提升肤色状态', 268],
+    ['简洁早晚护理方案', ['基础', '保湿', '防晒'], '护肤新手、步骤不想太复杂', 168],
+  ],
+};
+
+function SkinRecommendationsPage({ result, goBack, goPlan }) {
+  const group = result.baseKey === 'normalScore' ? 'normal' : ['dryScore', 'combinationDryScore'].includes(result.baseKey) ? 'dry' : 'oily';
+  return (
+    <main className="page skin-flow-page skin-reco-page">
+      <SkinFlowHeader title="为你推荐" onBack={goBack} />
+      <section className="reco-intro"><span>{result.skinType}</span><h2>更适合你的 3 套方案</h2><p>结合你的肤质、敏感等级与痘痘风险推荐</p></section>
+      <section className="skin-reco-list">
+        {recommendationSets[group].map(([title, tags, fit, price], index) => (
+          <article className="card skin-reco-card" key={title} onClick={goPlan}>
+            <div className={`reco-number n${index + 1}`}>{index + 1}</div>
+            <div className="reco-card-copy"><h3>{title}</h3><div>{tags.map(t => <span key={t}>{t}</span>)}</div><p>适合：{fit}</p><b>¥{price} 起</b></div>
+            <ChevronRight size={18} />
+          </article>
+        ))}
+      </section>
     </main>
   );
 }
@@ -746,9 +830,67 @@ function EditPlanPage({ goPlan }) {
   );
 }
 
-function CheckinPage({ goRecord }) {
+function CheckinPage({ goRecord, record, onSave, onReset }) {
+  const fileInputRef = useRef(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [preview, setPreview] = useState(record?.photo || '');
+  const [photoData, setPhotoData] = useState(record?.photo || '');
+  const [note, setNote] = useState(record?.note || '');
+  const todayDate = new Date();
+  const today = todayDate.getDate();
+  const daysInMonth = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0).getDate();
+  const leadingDays = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1).getDay();
   const marked = [3, 7, 16, 19];
-  const today = 17;
+  const isComplete = Boolean(record);
+  const streak = isComplete ? 8 : 7;
+  const totalDays = isComplete ? 16 : 15;
+  const aiAdvice = '今天的皮肤状态已记录。建议继续保持温和清洁和基础保湿，避免频繁更换护肤品，坚持观察 21 天变化。';
+
+  useEffect(() => () => {
+    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+  }, [preview]);
+
+  const choosePhoto = capture => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    if (capture) input.setAttribute('capture', capture);
+    else input.removeAttribute('capture');
+    input.value = '';
+    setSheetOpen(false);
+    input.click();
+  };
+
+  const handleFile = event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const objectUrl = URL.createObjectURL(file);
+    setPreview(current => {
+      if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+      return objectUrl;
+    });
+    const reader = new FileReader();
+    reader.onload = () => setPhotoData(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const saveCheckin = () => {
+    if (!photoData) return;
+    onSave({
+      photo: photoData,
+      note: note.trim(),
+      date: todayDate.toISOString(),
+      aiAdvice,
+    });
+  };
+
+  const reupload = () => {
+    setPreview(record?.photo || '');
+    setPhotoData(record?.photo || '');
+    setNote('');
+    onReset();
+    setSheetOpen(true);
+  };
+
   return (
     <main className="page checkin-page green-page">
       <StatusBar />
@@ -762,31 +904,66 @@ function CheckinPage({ goRecord }) {
       </div>
 
       <section className="card upload-card">
-        <h3>今日状态</h3>
-        <p>上传今天的皮肤状态，记录每一天的变化</p>
-        <button className="upload-zone">
-          <span className="upload-icon"><Upload size={22} strokeWidth={2.2} /></span>
-          <b>上传照片</b>
-          <em>点击拍照或从相册选择</em>
-        </button>
+        {isComplete ? (
+          <div className="checkin-success">
+            <span className="success-check"><Check size={25} strokeWidth={2.8} /></span>
+            <div className="success-copy"><h3>今日已打卡</h3><p>已记录今天的皮肤状态</p></div>
+            <img src={record.photo} alt="今日皮肤状态缩略图" />
+          </div>
+        ) : (
+          <>
+            <h3>今日状态</h3>
+            <p>上传今天的皮肤状态，记录每一天的变化</p>
+            {preview ? (
+              <>
+                <div className="checkin-preview">
+                  <img src={preview} alt="今日皮肤照片预览" />
+                  <button onClick={() => setSheetOpen(true)}>重新上传</button>
+                  <span>今日皮肤照片</span>
+                </div>
+                <label className="checkin-note">
+                  <b>今日备注</b>
+                  <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="记录一下今天的皮肤状态，比如出油、泛红、长痘、干燥等" />
+                </label>
+                <button className="primary-btn save-checkin" disabled={!photoData} onClick={saveCheckin}>保存今日打卡</button>
+              </>
+            ) : (
+              <button className="upload-zone" onClick={() => setSheetOpen(true)}>
+                <span className="upload-icon"><Upload size={22} strokeWidth={2.2} /></span>
+                <b>上传照片</b>
+                <em>点击拍照或从相册选择</em>
+              </button>
+            )}
+          </>
+        )}
+        {isComplete && (
+          <>
+            <div className="checkin-ai-advice"><b><Sparkles size={15} /> AI 今日建议</b><p>{record.aiAdvice}</p></div>
+            <div className="success-actions">
+              <button onClick={reupload}>重新上传</button>
+              <button className="primary-btn" onClick={goRecord}>查看记录</button>
+            </div>
+          </>
+        )}
+        <input ref={fileInputRef} className="checkin-file-input" type="file" accept="image/*" onChange={handleFile} />
       </section>
 
       <section className="card check-summary">
         <div className="summary-text">
           <h3>坚持护肤</h3>
-          <strong>15 <span>天</span></strong>
-          <p>已连续记录 7 天</p>
+          <strong>{totalDays} <span>天</span></strong>
+          <p>已连续记录 {streak} 天</p>
         </div>
         <button className="record-btn" onClick={goRecord}>查看记录 <ChevronRight size={16} /></button>
       </section>
 
       <section className="card calendar-card">
-        <div className="cal-head"><ChevronLeft /><h2>2024年6月</h2><ChevronRight /></div>
+        <div className="cal-head"><ChevronLeft /><h2>{todayDate.getFullYear()}年{todayDate.getMonth() + 1}月</h2><ChevronRight /></div>
         <div className="weekdays">{'日一二三四五六'.split('').map(d => <span key={d}>{d}</span>)}</div>
         <div className="days">
-          {Array.from({ length: 6 }, (_, i) => <span key={`e${i}`} />)}
-          {Array.from({ length: 30 }, (_, i) => i + 1).map(d => (
-            <button key={d} onClick={goRecord} className={`${marked.includes(d) ? 'marked' : ''} ${d === today ? 'today' : ''}`}>{d}</button>
+          {Array.from({ length: leadingDays }, (_, i) => <span key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => (
+            <button key={d} onClick={isComplete && d === today ? goRecord : undefined} className={`${marked.includes(d) || (isComplete && d === today) ? 'marked' : ''} ${d === today ? 'today' : ''}`}>{d}</button>
           ))}
         </div>
       </section>
@@ -795,27 +972,40 @@ function CheckinPage({ goRecord }) {
         <h3><Droplet size={16} fill="#f7a8bd" strokeWidth={0} /> 今日提醒</h3>
         <p>最近状态不错，继续保持补水与防晒习惯。</p>
       </section>
+      {sheetOpen && (
+        <div className="sheet-mask" onClick={() => setSheetOpen(false)}>
+          <section className="checkin-sheet" onClick={e => e.stopPropagation()}>
+            <div className="sheet-handle" />
+            <h3>上传今日皮肤状态</h3>
+            <button onClick={() => choosePhoto('environment')}><Camera size={19} /> 拍照上传</button>
+            <button onClick={() => choosePhoto()}><Upload size={19} /> 从相册选择</button>
+            <button className="sheet-cancel" onClick={() => setSheetOpen(false)}>取消</button>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
 
-function CheckinRecordPage({ goCheckin, goPlan }) {
+function CheckinRecordPage({ goCheckin, goPlan, record }) {
+  const date = record ? new Date(record.date) : new Date();
+  const displayDate = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
   return (
     <main className="page record-page">
       <StatusBar />
       <Header title="打卡记录" onBack={goCheckin} />
-      <div className="date-switch"><ChevronLeft /><h2>2024年6月5日</h2><ChevronRight /></div>
+      <div className="date-switch"><ChevronLeft /><h2>{displayDate}</h2><ChevronRight /></div>
       <section className="card record-card">
-        <div className="record-photo" />
+        {record?.photo ? <img className="record-photo uploaded" src={record.photo} alt="打卡照片" /> : <div className="record-photo" />}
         <div className="record-plan"><b>方案一</b><button onClick={goPlan}>查看方案 <ChevronRight size={18} /></button></div>
         <div className="divider" />
         <div className="note-row">
-          <div><h3>当日备注</h3><p>今天皮肤状态不错，继续坚持！<br />早睡早起 + 防晒。</p></div>
+          <div><h3>当日备注</h3><p>{record?.note || '今天皮肤状态不错，继续坚持！早睡早起 + 防晒。'}</p></div>
           <Edit3 size={22} />
         </div>
         <div className="divider" />
         <div className="note-row">
-          <div><h3><b>AI</b> 建议</h3><p>皮肤状态良好！建议保持当前护肤流程，注意补水和防晒哦～</p></div>
+          <div><h3><b>AI</b> 建议</h3><p>{record?.aiAdvice || '皮肤状态良好！建议保持当前护肤流程，注意补水和防晒哦～'}</p></div>
           <Volume2 size={22} />
         </div>
       </section>
@@ -921,6 +1111,26 @@ function Header({ title, onBack, action }) {
 
 function App() {
   const [screen, setScreen] = useState('home');
+  const [skinResult, setSkinResult] = useState(null);
+  const [checkinRecord, setCheckinRecord] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('fuji-today-checkin')) || null;
+      if (!saved?.date) return null;
+      const savedDate = new Date(saved.date);
+      const today = new Date();
+      return savedDate.toDateString() === today.toDateString() ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const saveCheckin = record => {
+    setCheckinRecord(record);
+    localStorage.setItem('fuji-today-checkin', JSON.stringify(record));
+  };
+  const resetCheckin = () => {
+    setCheckinRecord(null);
+    localStorage.removeItem('fuji-today-checkin');
+  };
   const currentTab = useMemo(() => {
     if (screen === 'checkin' || screen === 'record') return 'checkin';
     if (screen === 'ranking') return 'ranking';
@@ -931,16 +1141,20 @@ function App() {
   const goPlan = () => setScreen('plan');
   return (
     <div className="app-shell">
-      <div className="phone">
+      <div className={`phone ${screen === 'home' ? 'home-phone' : ''}`}>
         {screen === 'home' && <HomePage goPlan={goPlan} goSkinTest={() => setScreen('skintest')} />}
-        {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goPlan={goPlan} />}
+        {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goScan={() => setScreen('skin-scan')} />}
+        {screen === 'skin-scan' && <SkinScanPage goBack={() => setScreen('skintest')} goQuiz={() => setScreen('skin-quiz')} />}
+        {screen === 'skin-quiz' && <SkinQuizPage goBack={() => setScreen('skin-scan')} onComplete={result => { setSkinResult(result); setScreen('skin-result'); }} />}
+        {screen === 'skin-result' && skinResult && <SkinResultPage result={skinResult} goRecommendations={() => setScreen('skin-recommendations')} restart={() => setScreen('skintest')} />}
+        {screen === 'skin-recommendations' && skinResult && <SkinRecommendationsPage result={skinResult} goBack={() => setScreen('skin-result')} goPlan={goPlan} />}
         {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} goCheckin={() => setScreen('checkin')} single />}
         {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
-        {screen === 'checkin' && <CheckinPage goRecord={() => setScreen('record')} />}
-        {screen === 'record' && <CheckinRecordPage goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
+        {screen === 'checkin' && <CheckinPage record={checkinRecord} onSave={saveCheckin} onReset={resetCheckin} goRecord={() => setScreen('record')} />}
+        {screen === 'record' && <CheckinRecordPage record={checkinRecord} goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
         {screen === 'ranking' && <RankingPage />}
         {screen === 'profile' && <ProfilePage goPlan={goPlan} goRecord={() => setScreen('record')} />}
-        {screen !== 'edit' && screen !== 'record' && <BottomNav tab={currentTab} setTab={setTab} />}
+        {!['edit', 'record', 'skintest', 'skin-scan', 'skin-quiz', 'skin-result', 'skin-recommendations'].includes(screen) && <BottomNav tab={currentTab} setTab={setTab} />}
       </div>
     </div>
   );
