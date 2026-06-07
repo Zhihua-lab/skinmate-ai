@@ -5,6 +5,7 @@ __pycache__/
 
 # Video / analysis artifacts
 *.mp4
+!frontend/public/skin-analyzing.mp4
 *.wav
 frames*/
 model_outputs/

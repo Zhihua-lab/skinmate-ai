@@ -1312,6 +1312,93 @@ h1, h2, h3 { font-weight: 650; }
 @keyframes skinPulse { 50% { transform:scale(1.07); box-shadow:0 14px 32px rgba(232,113,143,.36); } }
 .skin-analysis-card h3 { margin:0 0 7px; font-family:var(--serif); font-size:20px; }
 .skin-analysis-card p { margin:0; color:var(--muted); font-size:12.5px; }
+
+/* 视频解析等待页 */
+.parsing-page {
+  display:flex;
+  flex-direction:column;
+  min-height:100%;
+  padding-bottom:max(24px, env(safe-area-inset-bottom));
+  background:linear-gradient(180deg, #fdeef2 0%, #fff7fa 34%, #fff 58%);
+}
+.parsing-intro { flex-shrink:0; padding:8px 2px 14px; text-align:center; }
+.parsing-intro h2 { margin:10px 0 6px; font-family:var(--serif); font-size:24px; font-weight:600; color:#5c3f48; }
+.parsing-intro p { margin:0 auto; max-width:300px; color:var(--muted); font-size:13px; line-height:1.65; }
+.parsing-card {
+  flex-shrink:0;
+  margin-top:4px;
+  padding:18px 18px 20px;
+  border-radius:26px;
+  text-align:center;
+  box-shadow:0 16px 36px rgba(180,90,120,.10);
+}
+.parsing-video-wrap {
+  width:100%;
+  max-width:280px;
+  margin:0 auto;
+  aspect-ratio:1 / 1;
+  border-radius:24px;
+  overflow:hidden;
+  background:radial-gradient(circle at 50% 40%, #fff 0%, #fdeef3 72%);
+  border:1px solid #f5dce4;
+  box-shadow:0 10px 24px rgba(180,90,120,.08);
+}
+.parsing-animation {
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+}
+.parsing-step-text {
+  margin:16px 0 14px;
+  min-height:22px;
+  color:#7a5561;
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:.02em;
+  animation:skinRise .35s ease both;
+}
+.parsing-progress-track {
+  width:100%;
+  height:8px;
+  border-radius:999px;
+  overflow:hidden;
+  background:#fce8ef;
+}
+.parsing-progress-bar {
+  display:block;
+  height:100%;
+  border-radius:999px;
+  background:var(--grad);
+  box-shadow:0 0 12px rgba(232,113,143,.28);
+  transition:width .55s ease;
+}
+.parsing-progress-label {
+  display:inline-block;
+  margin-top:10px;
+  color:#c58ea0;
+  font-size:12px;
+  font-weight:600;
+}
+.parsing-footnote {
+  flex-shrink:0;
+  margin:16px 8px 0;
+  text-align:center;
+  color:#b69aa4;
+  font-size:11.5px;
+  line-height:1.55;
+}
+.parsing-empty {
+  margin-top:18px;
+  padding:22px 18px;
+  text-align:center;
+}
+.parsing-empty p {
+  margin:0 0 16px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.6;
+}
 .skin-scan-hero { padding:18px 0 16px; text-align:center; }
 .scan-face { position:relative; width:104px; height:104px; margin:0 auto 11px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; background:var(--grad); box-shadow:0 12px 26px rgba(232,113,143,.22); }
 .scan-face span { font-family:var(--serif); font-size:27px; font-weight:700; }

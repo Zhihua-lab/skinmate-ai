@@ -49,6 +49,17 @@ import './styles.css';
 import { analyzeVideoUrl, buildPlanFromAnalysis, extractDouyinUrl } from './videoAnalysis';
 
 const LOCAL_CHECKIN_KEY = 'fuji-today-checkin';
+const PENDING_DOUYIN_LINK_KEY = 'pendingDouyinLink';
+const GENERATED_PLAN_KEY = 'currentGeneratedPlan';
+const MOCK_PARSE_DURATION = 18000;
+
+const parsingSteps = [
+  '正在识别视频重点…',
+  '正在提取护肤步骤…',
+  '正在整理产品和使用顺序…',
+  '正在匹配你的肤况建议…',
+  '正在生成可执行方案…',
+];
 
 function getTodayDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -298,6 +309,29 @@ const planSteps = [
   },
 ];
 
+function generatePlanFromLink(sourceLink) {
+  return planSteps.map(step => ({
+    ...step,
+    sources: step.sources.map((source, index) => ({
+      ...source,
+      quote: index === 0
+        ? `根据你导入的视频内容，建议这一步：${step.title}。`
+        : source.quote,
+    })),
+    description: step.description,
+    product: step.product,
+  }));
+}
+
+function readSavedGeneratedPlan() {
+  try {
+    const saved = localStorage.getItem(GENERATED_PLAN_KEY);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
 const cases = [
   { title: '屏障修护方案', steps: 4, price: 198, periods: ['day', 'night'], image: '/case-barrier-cream.png' },
   { title: '敏感肌修护方案', steps: 5, price: 268, periods: ['day', 'night'], image: '/case-sensitive-toner.png' },
@@ -378,12 +412,10 @@ function ProductImage({ tone }) {
   );
 }
 
-function HomePage({ goPlan, goSkinTest }) {
+function HomePage({ goPlan, goSkinTest, goParsing }) {
   const [draft, setDraft] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const submit = async () => {
-    if (loading) return;
+  const submit = () => {
     const text = draft.trim();
     const douyinUrl = text ? extractDouyinUrl(text) : null;
     if (!douyinUrl) {
@@ -392,21 +424,9 @@ function HomePage({ goPlan, goSkinTest }) {
       return;
     }
 
-    setLoading(true);
     setError('');
-    try {
-      const data = await analyzeVideoUrl(douyinUrl);
-      const plan = buildPlanFromAnalysis(data.analysis);
-      goPlan(plan, {
-        sourceUrl: data.analysis?.source_url || text,
-        videoId: data.video_id || data.analysis?.video_id || '',
-        single: true,
-      });
-    } catch (err) {
-      setError(err.message || '视频解析失败，请稍后重试');
-    } finally {
-      setLoading(false);
-    }
+    localStorage.setItem(PENDING_DOUYIN_LINK_KEY, text);
+    goParsing();
   };
   return (
     <main className="page home-page">
@@ -446,16 +466,11 @@ function HomePage({ goPlan, goSkinTest }) {
           />
         </div>
 
-        <button
-          className={`primary-btn generate-btn ${loading ? 'is-loading' : ''}`}
-          disabled={loading}
-          onClick={submit}
-        >
-          <span>{loading ? '正在解析视频' : '开始整理'}</span>
-          {loading ? <Sparkles size={18} strokeWidth={2.2} /> : <ChevronRight size={18} strokeWidth={2.6} />}
+        <button className="primary-btn generate-btn" onClick={submit}>
+          <span>开始整理</span>
+          <ChevronRight size={18} strokeWidth={2.6} />
         </button>
         {error && <p className="import-error">{error}</p>}
-        {loading && <p className="import-hint">正在提取抖音视频内容并识别产品，通常需要 20-90 秒，请稍候。</p>}
       </section>
 
       <section className="card skintest-cta" onClick={goSkinTest}>
@@ -925,6 +940,149 @@ function SkinRecommendationsPage({ result, goBack, goPlan }) {
           </article>
         ))}
       </section>
+    </main>
+  );
+}
+
+function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
+  const [progress, setProgress] = useState(0);
+  const [stepIndex, setStepIndex] = useState(0);
+  const videoRef = useRef(null);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    if (!sourceLink) return undefined;
+
+    let cancelled = false;
+    let apiResult = null;
+    let apiError = null;
+
+    const progressTimer = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 92) return prev;
+        return Math.min(92, prev + Math.random() * 4);
+      });
+    }, 800);
+
+    const stepDelay = 3500 + Math.floor(Math.random() * 1500);
+    const stepTimer = setInterval(() => {
+      setStepIndex(prev => (prev + 1) % parsingSteps.length);
+    }, stepDelay);
+
+    const apiPromise = analyzeVideoUrl(extractDouyinUrl(sourceLink) || sourceLink)
+      .then(data => {
+        apiResult = data;
+        return data;
+      })
+      .catch(err => {
+        apiError = err;
+        return null;
+      });
+
+    const finish = (plan, meta) => {
+      if (cancelled) return;
+      setProgress(100);
+      localStorage.setItem(GENERATED_PLAN_KEY, JSON.stringify({ plan, meta }));
+      localStorage.removeItem(PENDING_DOUYIN_LINK_KEY);
+      window.setTimeout(() => {
+        if (!cancelled) onCompleteRef.current(plan, meta);
+      }, 500);
+    };
+
+    const run = async () => {
+      await new Promise(resolve => window.setTimeout(resolve, MOCK_PARSE_DURATION));
+      if (cancelled) return;
+
+      if (apiResult?.analysis) {
+        try {
+          const plan = buildPlanFromAnalysis(apiResult.analysis);
+          finish(plan, {
+            sourceUrl: apiResult.analysis?.source_url || sourceLink,
+            videoId: apiResult.video_id || apiResult.analysis?.video_id || '',
+            single: true,
+          });
+          return;
+        } catch (err) {
+          apiError = err;
+        }
+      }
+
+      if (apiError && !apiResult) {
+        console.warn('Video parse fell back to mock plan.', apiError);
+      }
+
+      finish(generatePlanFromLink(sourceLink), {
+        sourceUrl: sourceLink,
+        videoId: '',
+        single: true,
+        mock: true,
+      });
+    };
+
+    run();
+    void apiPromise;
+
+    return () => {
+      cancelled = true;
+      clearInterval(progressTimer);
+      clearInterval(stepTimer);
+    };
+  }, [sourceLink]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return undefined;
+    const play = () => video.play().catch(() => {});
+    play();
+    video.addEventListener('loadeddata', play);
+    return () => video.removeEventListener('loadeddata', play);
+  }, []);
+
+  if (!sourceLink) {
+    return (
+      <main className="page parsing-page">
+        <Header title="正在解析视频内容" onBack={onBack} />
+        <section className="parsing-empty card">
+          <p>未找到待解析的抖音链接，请返回首页重新粘贴。</p>
+          <button className="primary-btn" onClick={onBack}>返回首页</button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="page parsing-page">
+      <Header title="正在解析视频内容" onBack={onBack} />
+      <section className="parsing-intro skin-animate-in">
+        <span className="skin-kicker"><Sparkles size={14} /> 视频解析中</span>
+        <h2>正在解析视频内容</h2>
+        <p>我正在把视频里的护肤经验，整理成你的专属方案</p>
+      </section>
+
+      <section className="parsing-card card skin-animate-in">
+        <div className="parsing-video-wrap">
+          <video
+            ref={videoRef}
+            src="/skin-analyzing.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="parsing-animation"
+          />
+        </div>
+        <p className="parsing-step-text">{parsingSteps[stepIndex]}</p>
+        <div className="parsing-progress-track">
+          <span className="parsing-progress-bar" style={{ width: `${Math.min(100, progress)}%` }} />
+        </div>
+        <span className="parsing-progress-label">{Math.round(Math.min(100, progress))}%</span>
+      </section>
+
+      <p className="parsing-footnote">视频内容较长时，解析可能需要几十秒，请保持页面打开</p>
     </main>
   );
 }
@@ -1665,17 +1823,23 @@ function Header({ title, onBack, action }) {
   return <header className="header"><button onClick={onBack}><ArrowLeft size={27} /></button><h1>{title}</h1>{action || <span />}</header>;
 }
 
-const skinRouteByScreen = {
+const appRouteByScreen = {
+  home: '/',
+  parsing: '/parsing',
+  plan: '/plan-detail',
   skintest: '/skin-test/intro',
   'skin-capture': '/skin-test/camera',
   'skin-quiz': '/skin-test/questions',
   'skin-result': '/skin-test/result',
 };
 
-const skinScreenByRoute = Object.fromEntries(Object.entries(skinRouteByScreen).map(([screen, route]) => [route, screen]));
+const appScreenByRoute = Object.fromEntries(
+  Object.entries(appRouteByScreen).map(([screen, route]) => [route, screen]),
+);
 
 function App() {
-  const [screen, setScreen] = useState(() => skinScreenByRoute[window.location.pathname] || 'home');
+  const [screen, setScreen] = useState(() => appScreenByRoute[window.location.pathname] || 'home');
+  const [pendingDouyinLink, setPendingDouyinLink] = useState(() => localStorage.getItem(PENDING_DOUYIN_LINK_KEY) || '');
   const [activePlan, setActivePlan] = useState(null);
   const [planMeta, setPlanMeta] = useState(null);
   const [skinResult, setSkinResult] = useState(() => window.location.pathname === '/skin-test/result'
@@ -1723,12 +1887,11 @@ function App() {
     }
   };
   useEffect(() => {
-    const route = skinRouteByScreen[screen];
-    const nextPath = route || '/';
+    const nextPath = appRouteByScreen[screen] || '/';
     if (window.location.pathname !== nextPath) window.history.pushState({ screen }, '', nextPath);
   }, [screen]);
   useEffect(() => {
-    const onPopState = () => setScreen(skinScreenByRoute[window.location.pathname] || 'home');
+    const onPopState = () => setScreen(appScreenByRoute[window.location.pathname] || 'home');
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
@@ -1740,14 +1903,39 @@ function App() {
   }, [screen]);
   const setTab = tab => setScreen(tab);
   const goPlan = (plan = null, meta = null) => {
-    setActivePlan(plan);
-    setPlanMeta(meta);
+    if (plan) {
+      setActivePlan(plan);
+      setPlanMeta(meta);
+      localStorage.setItem(GENERATED_PLAN_KEY, JSON.stringify({ plan, meta }));
+    } else {
+      const saved = readSavedGeneratedPlan();
+      setActivePlan(saved?.plan || null);
+      setPlanMeta(saved?.meta || null);
+    }
     setScreen('plan');
   };
+  const goParsing = () => {
+    const link = localStorage.getItem(PENDING_DOUYIN_LINK_KEY) || '';
+    setPendingDouyinLink(link);
+    setScreen('parsing');
+  };
+  const cancelParsing = () => {
+    localStorage.removeItem(PENDING_DOUYIN_LINK_KEY);
+    setPendingDouyinLink('');
+    setScreen('home');
+  };
+  const savedGeneratedPlan = readSavedGeneratedPlan();
   return (
     <div className="app-shell">
       <div className={`phone ${screen === 'home' ? 'home-phone' : ''}`}>
-        {screen === 'home' && <HomePage goPlan={goPlan} goSkinTest={() => setScreen('skintest')} />}
+        {screen === 'home' && <HomePage goPlan={goPlan} goSkinTest={() => setScreen('skintest')} goParsing={goParsing} />}
+        {screen === 'parsing' && (
+          <ParsingVideoPage
+            sourceLink={pendingDouyinLink || localStorage.getItem(PENDING_DOUYIN_LINK_KEY) || ''}
+            onBack={cancelParsing}
+            onComplete={(plan, meta) => goPlan(plan, meta)}
+          />
+        )}
         {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goCapture={() => setScreen('skin-capture')} />}
         {screen === 'skin-capture' && <SkinCapturePage goBack={() => setScreen('skintest')} goQuestions={() => setScreen('skin-quiz')} />}
         {screen === 'skin-quiz' && <SkinQuizPage goBack={() => setScreen('skin-capture')} onComplete={result => { setSkinResult(result); setScreen('skin-result'); }} />}
@@ -1755,8 +1943,8 @@ function App() {
         {screen === 'skin-recommendations' && skinResult && <SkinRecommendationsPage result={skinResult} goBack={() => setScreen('skin-result')} goPlan={goPlan} />}
         {screen === 'plan' && (
           <PlanDetailPage
-            steps={activePlan || planSteps}
-            planMeta={planMeta}
+            steps={activePlan || savedGeneratedPlan?.plan || planSteps}
+            planMeta={planMeta || savedGeneratedPlan?.meta}
             goHome={() => setScreen('home')}
             goEdit={() => setScreen('edit')}
             goCheckin={() => setScreen('checkin')}
@@ -1768,7 +1956,7 @@ function App() {
         {screen === 'record' && <CheckinRecordPage record={checkinRecord} goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
         {screen === 'ranking' && <RankingPage />}
         {screen === 'profile' && <ProfilePage goPlan={goPlan} goRecord={() => setScreen('record')} />}
-        {!['edit', 'record', 'skintest', 'skin-capture', 'skin-quiz', 'skin-result', 'skin-recommendations'].includes(screen) && <BottomNav tab={currentTab} setTab={setTab} />}
+        {!['edit', 'record', 'parsing', 'plan', 'skintest', 'skin-capture', 'skin-quiz', 'skin-result', 'skin-recommendations'].includes(screen) && <BottomNav tab={currentTab} setTab={setTab} />}
       </div>
     </div>
   );
