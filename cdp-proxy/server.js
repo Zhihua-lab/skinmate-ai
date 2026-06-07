@@ -9,6 +9,11 @@ const PAGE_TIMEOUT_MS = Number(process.env.CDP_PAGE_TIMEOUT_MS || 60000);
 const HEADLESS_MODE = process.env.CDP_HEADLESS || "new";
 const EVAL_RETRY_COUNT = Number(process.env.CDP_EVAL_RETRY_COUNT || 5);
 const EVAL_RETRY_DELAY_MS = Number(process.env.CDP_EVAL_RETRY_DELAY_MS || 750);
+const NAVIGATION_WAIT_UNTIL = process.env.CDP_WAIT_UNTIL || "domcontentloaded";
+const POST_GOTO_SETTLE_MS = Number(process.env.CDP_POST_GOTO_SETTLE_MS || 2500);
+const DEFAULT_USER_AGENT =
+  process.env.CDP_USER_AGENT ||
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
 
 const app = express();
 app.use(express.text({ type: "*/*", limit: "512kb" }));
@@ -134,12 +139,17 @@ app.get("/new", requireAuth, async (req, res) => {
   try {
     const browser = await getBrowser();
     const page = await browser.newPage();
+    await page.setUserAgent(DEFAULT_USER_AGENT);
+    await page.setViewport({ width: 1440, height: 900 });
     page.setDefaultNavigationTimeout(PAGE_TIMEOUT_MS);
-    await page.goto(url, { waitUntil: "networkidle2", timeout: PAGE_TIMEOUT_MS });
+    await page.goto(url, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: PAGE_TIMEOUT_MS });
     await page.waitForFunction(
       () => Boolean(document.body && document.documentElement),
       { timeout: 10000 }
     ).catch(() => {});
+    if (POST_GOTO_SETTLE_MS > 0) {
+      await sleep(POST_GOTO_SETTLE_MS);
+    }
     const cdpSession = await page.target().createCDPSession();
     await cdpSession.send("Runtime.enable");
     const targetId = crypto.randomUUID();
