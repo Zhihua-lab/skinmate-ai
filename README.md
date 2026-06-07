@@ -1,3 +1,4 @@
+Netlify redeploy trigger
 # SkinMate AI
 
 这个仓库现在按职责分成了更清晰的结构：
