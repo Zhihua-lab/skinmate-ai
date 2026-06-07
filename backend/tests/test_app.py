@@ -22,4 +22,4 @@ class AppTests(unittest.TestCase):
             analyze_video(AnalyzeVideoRequest(url="https://www.douyin.com/video/1234567890123456789"))
 
         self.assertEqual(context.exception.status_code, 500)
-        self.assertEqual(context.exception.detail, "DASHSCOPE_API_KEY is not set")
+        self.assertEqual(context.exception.detail, "LLM_API_KEY is not set")

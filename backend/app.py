@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 load_dotenv()
 
+from skincare_video_analyzer import get_llm_api_key
 from skincare_web_app import run_url_analysis
 
 app = FastAPI(title="Skincare AI Backend", version="1.0.0")
@@ -82,8 +83,11 @@ def json_safe(value: Any) -> str:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    api_key = os.getenv("DASHSCOPE_API_KEY")
-    api_key_configured = bool(api_key and api_key.strip())
+    try:
+        get_llm_api_key()
+        api_key_configured = True
+    except RuntimeError:
+        api_key_configured = False
     return {
         "success": True,
         "status": "ok",
@@ -93,9 +97,10 @@ def health() -> dict[str, Any]:
 
 @app.post("/analyze-video")
 def analyze_video(payload: AnalyzeVideoRequest) -> dict[str, Any]:
-    api_key = os.getenv("DASHSCOPE_API_KEY")
-    if not api_key or not api_key.strip():
-        raise HTTPException(status_code=500, detail="DASHSCOPE_API_KEY is not set")
+    try:
+        get_llm_api_key()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     output_dir = Path(os.getenv("OUTPUT_DIR", "skincare_outputs")) / "web_runs"
 

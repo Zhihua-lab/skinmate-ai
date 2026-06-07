@@ -16,8 +16,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DASHSCOPE_CHAT_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-DEFAULT_MODEL = os.getenv("DASHSCOPE_MODEL", "qwen3-vl-flash")
+DEFAULT_PROVIDER = os.getenv("LLM_PROVIDER", "").strip().lower() or "dashscope"
+DEFAULT_CHAT_URLS = {
+    "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "deepseek": "https://api.deepseek.com/chat/completions",
+}
+DEFAULT_MODEL_BY_PROVIDER = {
+    "dashscope": "qwen3-vl-flash",
+    "deepseek": "deepseek-v4-flash",
+}
+DEFAULT_MODEL = (
+    os.getenv("LLM_MODEL")
+    or os.getenv("DASHSCOPE_MODEL")
+    or DEFAULT_MODEL_BY_PROVIDER.get(DEFAULT_PROVIDER, DEFAULT_MODEL_BY_PROVIDER["dashscope"])
+)
 DEFAULT_CDP_PROXY_URL = os.getenv("CDP_ENDPOINT", "http://localhost:3456")
 DEFAULT_OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "skincare_outputs"))
 REQUIRED_LIST_FIELDS = [
@@ -84,12 +96,33 @@ def extract_douyin_url(text: str) -> str:
     return match.group(0).rstrip(".,，。;；!！?？")
 
 
-def build_dashscope_headers() -> dict[str, str]:
-    api_key = os.getenv("DASHSCOPE_API_KEY")
+def get_llm_provider() -> str:
+    provider = os.getenv("LLM_PROVIDER", "").strip().lower() or "dashscope"
+    return provider
+
+
+def get_llm_api_key() -> str:
+    provider = get_llm_provider()
+    api_key = os.getenv("LLM_API_KEY")
+    if not api_key and provider == "dashscope":
+        api_key = os.getenv("DASHSCOPE_API_KEY")
     if not api_key or not api_key.strip():
-        raise RuntimeError("DASHSCOPE_API_KEY is not set")
+        raise RuntimeError("LLM_API_KEY is not set")
+    return api_key.strip()
+
+
+def get_llm_chat_url() -> str:
+    provider = get_llm_provider()
+    return (
+        os.getenv("LLM_BASE_URL")
+        or DEFAULT_CHAT_URLS.get(provider)
+        or DEFAULT_CHAT_URLS["dashscope"]
+    )
+
+
+def build_llm_headers() -> dict[str, str]:
     return {
-        "Authorization": f"Bearer {api_key.strip()}",
+        "Authorization": f"Bearer {get_llm_api_key()}",
         "Content-Type": "application/json",
     }
 
@@ -339,6 +372,12 @@ def build_multimodal_payload(
     page_text: str = "",
     model: str = DEFAULT_MODEL,
 ) -> dict[str, Any]:
+    provider = get_llm_provider()
+    if provider == "deepseek":
+        raise RuntimeError(
+            "DeepSeek official chat API is currently text-only in the published docs and does not accept image_url frame input."
+        )
+
     content: list[dict[str, Any]] = [{"type": "text", "text": build_skincare_prompt(video_id, source_url, page_text)}]
 
     for index, frame in enumerate(frames, start=1):
@@ -402,8 +441,8 @@ def analyze_frames(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     response = requests.post(
-        DASHSCOPE_CHAT_URL,
-        headers=build_dashscope_headers(),
+        get_llm_chat_url(),
+        headers=build_llm_headers(),
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         timeout=180,
     )

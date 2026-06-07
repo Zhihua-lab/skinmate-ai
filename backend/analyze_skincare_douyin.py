@@ -34,7 +34,7 @@ def main() -> int:
     parser.add_argument("--max-frames", type=int, default=30, help="Maximum frames sent to the multimodal model.")
     parser.add_argument("--page-text", default="", help="Optional visible page copy or title from Douyin.")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Directory for raw and parsed model outputs.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="DashScope multimodal model name.")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI-compatible multimodal/chat model name.")
     parser.add_argument("--cdp-proxy-url", default=DEFAULT_CDP_PROXY_URL, help="web-access CDP proxy URL.")
     args = parser.parse_args()
     source_url = extract_douyin_url(args.url)

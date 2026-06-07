@@ -59,21 +59,45 @@ class SkincareVideoAnalyzerTests(unittest.TestCase):
         self.assertIn("护肤", prompt)
         self.assertIn("不要补全没有证据支持的信息", prompt)
 
-    @patch.dict("os.environ", {"DASHSCOPE_API_KEY": "test-key"})
-    def test_dashscope_headers_use_env_api_key(self):
-        from skincare_video_analyzer import build_dashscope_headers
+    @patch.dict("os.environ", {"LLM_API_KEY": "test-key"}, clear=True)
+    def test_llm_headers_use_env_api_key(self):
+        from skincare_video_analyzer import build_llm_headers
 
-        headers = build_dashscope_headers()
+        headers = build_llm_headers()
 
         self.assertEqual(headers["Authorization"], "Bearer test-key")
         self.assertEqual(headers["Content-Type"], "application/json")
 
     @patch.dict("os.environ", {}, clear=True)
-    def test_dashscope_headers_require_api_key(self):
-        from skincare_video_analyzer import build_dashscope_headers
+    def test_llm_headers_require_api_key(self):
+        from skincare_video_analyzer import build_llm_headers
 
         with self.assertRaises(RuntimeError):
-            build_dashscope_headers()
+            build_llm_headers()
+
+    @patch.dict("os.environ", {"LLM_PROVIDER": "deepseek", "LLM_API_KEY": "k"}, clear=True)
+    def test_deepseek_chat_url_defaults_correctly(self):
+        from skincare_video_analyzer import get_llm_chat_url
+
+        self.assertEqual(get_llm_chat_url(), "https://api.deepseek.com/chat/completions")
+
+    @patch.dict("os.environ", {"LLM_PROVIDER": "deepseek", "LLM_API_KEY": "k"}, clear=True)
+    def test_deepseek_provider_rejects_multimodal_frames(self):
+        from skincare_video_analyzer import build_multimodal_payload
+
+        with self.assertRaises(RuntimeError):
+            build_multimodal_payload(
+                video_id="1234567890123456789",
+                source_url="https://www.douyin.com/video/1234567890123456789",
+                frames=[],
+                page_text="test",
+            )
+
+    @patch.dict("os.environ", {"DASHSCOPE_API_KEY": "legacy-key"}, clear=True)
+    def test_dashscope_api_key_is_still_supported(self):
+        from skincare_video_analyzer import get_llm_api_key
+
+        self.assertEqual(get_llm_api_key(), "legacy-key")
 
     def test_normalize_analysis_result_fills_required_fields(self):
         from skincare_video_analyzer import normalize_analysis_result
