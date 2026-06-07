@@ -1,1 +1,3 @@
+/api/analyze-video /.netlify/functions/analyze-video 200
+/api/revise-plan https://skinmate-ai-production.up.railway.app/revise-plan 200
 /* /index.html 200
