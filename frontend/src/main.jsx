@@ -41,6 +41,7 @@ import {
   Upload,
   User,
   Volume2,
+  X,
   Zap,
 } from 'lucide-react';
 import './styles.css';
@@ -1039,7 +1040,14 @@ function EditPlanPage({ goPlan }) {
 function CheckinPage({ goRecord, record, onSave, onReset }) {
   const fileInputRef = useRef(null);
   const calendarSwipeRef = useRef(null);
+  const cameraVideoRef = useRef(null);
+  const cameraCanvasRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const cameraRequestRef = useRef(0);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
   const [preview, setPreview] = useState(record?.photo || '');
   const [photoData, setPhotoData] = useState(record?.photo || '');
   const [note, setNote] = useState(record?.note || '');
@@ -1061,11 +1069,75 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
     if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
   }, [preview]);
 
-  const choosePhoto = capture => {
+  const stopCheckinCamera = () => {
+    if (!cameraStreamRef.current) return;
+    cameraStreamRef.current.getTracks().forEach(track => track.stop());
+    cameraStreamRef.current = null;
+  };
+
+  const closeCheckinCamera = () => {
+    cameraRequestRef.current += 1;
+    stopCheckinCamera();
+    setCameraReady(false);
+    setCameraOpen(false);
+  };
+
+  const openCheckinCamera = async () => {
+    const requestId = ++cameraRequestRef.current;
+    setSheetOpen(false);
+    setCameraOpen(true);
+    setCameraReady(false);
+    setCameraError('');
+    stopCheckinCamera();
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera API is not available');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      cameraStreamRef.current = stream;
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+        await cameraVideoRef.current.play();
+      }
+      setCameraReady(true);
+    } catch (error) {
+      if (requestId !== cameraRequestRef.current) return;
+      console.error(error);
+      stopCheckinCamera();
+      setCameraError('无法打开摄像头，请检查浏览器摄像头权限。');
+    }
+  };
+
+  useEffect(() => () => {
+    cameraRequestRef.current += 1;
+    stopCheckinCamera();
+  }, []);
+
+  const takeCheckinPhoto = () => {
+    const video = cameraVideoRef.current;
+    const canvas = cameraCanvasRef.current;
+    if (!video || !canvas || !cameraReady || !video.videoWidth || !video.videoHeight) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const image = canvas.toDataURL('image/jpeg', 0.92);
+    setPreview(image);
+    setPhotoData(image);
+    closeCheckinCamera();
+  };
+
+  const choosePhoto = () => {
     const input = fileInputRef.current;
     if (!input) return;
-    if (capture) input.setAttribute('capture', capture);
-    else input.removeAttribute('capture');
     input.value = '';
     setSheetOpen(false);
     input.click();
@@ -1221,9 +1293,33 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
           <section className="checkin-sheet" onClick={e => e.stopPropagation()}>
             <div className="sheet-handle" />
             <h3>上传今日皮肤状态</h3>
-            <button onClick={() => choosePhoto('environment')}><Camera size={19} /> 拍照上传</button>
+            <button onClick={openCheckinCamera}><Camera size={19} /> 拍照上传</button>
             <button onClick={() => choosePhoto()}><Upload size={19} /> 从相册选择</button>
             <button className="sheet-cancel" onClick={() => setSheetOpen(false)}>取消</button>
+          </section>
+        </div>
+      )}
+      {cameraOpen && (
+        <div className="checkin-camera-mask">
+          <section className="checkin-camera-card">
+            <div className="checkin-camera-head">
+              <h3>拍摄今日皮肤状态</h3>
+              <button onClick={closeCheckinCamera} aria-label="关闭拍照"><X size={20} /></button>
+            </div>
+            <div className="checkin-camera-view">
+              <video ref={cameraVideoRef} autoPlay playsInline muted />
+              {!cameraReady && (
+                <div className="checkin-camera-placeholder">
+                  <Camera size={34} strokeWidth={1.8} />
+                  <b>{cameraError ? '摄像头暂不可用' : '正在打开摄像头'}</b>
+                  <p>{cameraError || '请允许浏览器使用摄像头'}</p>
+                </div>
+              )}
+            </div>
+            <canvas ref={cameraCanvasRef} style={{ display: 'none' }} />
+            <button className="checkin-shutter" disabled={!cameraReady} onClick={takeCheckinPhoto} aria-label="拍照">
+              <span />
+            </button>
           </section>
         </div>
       )}
