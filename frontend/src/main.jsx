@@ -79,6 +79,42 @@ async function ensureSupabaseUser() {
   return data.user;
 }
 
+function createMirroredImage(video, canvas) {
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return null;
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.save();
+  ctx.translate(width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, width, height);
+  ctx.restore();
+
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+function createNormalImage(video, canvas) {
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return null;
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.drawImage(video, 0, 0, width, height);
+
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
 function dataUrlToBlob(dataUrl) {
   const [header, base64] = dataUrl.split(',');
   const mimeMatch = header.match(/data:(.*?);base64/);
@@ -594,6 +630,7 @@ function SkinCapturePage({ goBack, goQuestions }) {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
+  const [analysisImage, setAnalysisImage] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const stopCamera = () => {
@@ -660,37 +697,47 @@ function SkinCapturePage({ goBack, goQuestions }) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (!video || !canvas || !cameraReady || !video.videoWidth || !video.videoHeight) return;
+    if (!video || !canvas || !cameraReady) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const mirroredImage = createMirroredImage(video, canvas);
+    const normalImage = createNormalImage(video, canvas);
+    if (!mirroredImage || !normalImage) return;
 
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    setCapturedImage(canvas.toDataURL('image/jpeg', 0.92));
+    setCapturedImage(mirroredImage);
+    setAnalysisImage(normalImage);
     cameraRequestRef.current += 1;
     stopCamera();
     setCameraReady(false);
   };
 
   const handleRetake = () => {
-    setCapturedImage(null);
+    setCapturedImage(current => {
+      if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+      return null;
+    });
+    setAnalysisImage(null);
     startCamera();
   };
 
   const handleFile = event => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const objectUrl = URL.createObjectURL(file);
+
     cameraRequestRef.current += 1;
     stopCamera();
     setCameraReady(false);
     setCameraError('');
-    setCapturedImage(current => {
-      if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
-      return objectUrl;
-    });
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      setCapturedImage(current => {
+        if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+        return result;
+      });
+      setAnalysisImage(result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const chooseFromGallery = () => {
@@ -716,10 +763,10 @@ function SkinCapturePage({ goBack, goQuestions }) {
 
       <section className={`skin-capture-frame ${capturedImage ? 'has-preview' : ''}`}>
         {capturedImage ? (
-          <img src={capturedImage} alt="测肤照片预览" />
+          <img src={capturedImage} alt="测肤照片预览" className="captured-photo" />
         ) : (
           <>
-            <video ref={videoRef} autoPlay playsInline muted />
+            <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
             {!cameraReady && (
               <div className="skin-capture-placeholder">
                 <div className="skin-face-guide"><Camera size={30} strokeWidth={1.8} /></div>
@@ -1292,14 +1339,10 @@ function CheckinPage({ goRecord, record, onSave, onReset }) {
     const canvas = cameraCanvasRef.current;
     if (!video || !canvas || !cameraReady || !video.videoWidth || !video.videoHeight) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const image = canvas.toDataURL('image/jpeg', 0.92);
-    setPreview(image);
-    setPhotoData(image);
+    const mirroredImage = createMirroredImage(video, canvas);
+    if (!mirroredImage) return;
+    setPreview(mirroredImage);
+    setPhotoData(mirroredImage);
     closeCheckinCamera();
   };
 
