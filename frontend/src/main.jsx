@@ -124,9 +124,9 @@ const planSteps = [
 ];
 
 const cases = [
-  { title: '屏障修护方案', steps: 4, price: 198, periods: ['day', 'night'], seed: 'case-1' },
-  { title: '敏感肌修护方案', steps: 5, price: 268, periods: ['day', 'night'], seed: 'case-2' },
-  { title: '抗老紧致方案', steps: 6, price: 398, periods: ['night'], seed: 'case-3' },
+  { title: '屏障修护方案', steps: 4, price: 198, periods: ['day', 'night'], image: '/case-barrier-cream.png' },
+  { title: '敏感肌修护方案', steps: 5, price: 268, periods: ['day', 'night'], image: '/case-sensitive-toner.png' },
+  { title: '抗老紧致方案', steps: 6, price: 398, periods: ['night'], image: '/case-anti-aging-serum.png' },
 ];
 
 const skinMetrics = [
@@ -283,8 +283,8 @@ function HomePage({ goPlan, goSkinTest }) {
       </section>
       <div className="case-grid">
         {cases.map(c => (
-          <article className="case-card" key={c.seed} onClick={goPlan}>
-            <div className={`case-img ${c.seed}`} />
+          <article className="case-card" key={c.title} onClick={goPlan}>
+            <img className="case-img" src={c.image} alt="" />
             <h3>{c.title}</h3>
             <p className="case-meta">来自抖音视频 · {c.steps}步护理</p>
             <div className="case-foot">
@@ -357,7 +357,7 @@ const skinProfiles = {
 function calculateSkinResult(answers) {
   const scores = {
     dryScore: 0, oilyScore: 0, normalScore: 0, combinationDryScore: 0,
-    combinationOilyScore: 0, combinationScore: 0, acneScore: 0, sensitiveScore: 0,
+    combinationOilyScore: 0, combinationScore: 0, acneScore: 0, sensitiveScore: 0, agingScore: 1,
   };
   answers.forEach((answer, index) => {
     const points = skinQuiz[index].options.find(option => option[0] === answer)?.[3] || {};
@@ -372,53 +372,238 @@ function calculateSkinResult(answers) {
   else if (baseKey === 'dryScore' && scores.combinationDryScore >= scores.dryScore - 1) skinType = '混合偏干肌';
   else if (baseKey === 'combinationOilyScore') skinType = '混合偏油肌';
   else if (baseKey === 'combinationDryScore') skinType = '混合偏干肌';
-  const sensitiveLevel = scores.sensitiveScore <= 1 ? '非敏感肌' : scores.sensitiveScore === 2 ? '轻度敏感肌' : scores.sensitiveScore <= 4 ? '中度敏感肌' : '重度敏感肌';
-  const acneLevel = ['低', '轻度', '中等', '较高'][scores.acneScore] || '高';
+  if (scores.combinationScore + scores.combinationOilyScore + scores.combinationDryScore >= 3 && scores.sensitiveScore >= 2) {
+    skinType = '混合偏敏肌';
+  }
+  const sensitiveLevel = scores.sensitiveScore <= 1 ? '较低' : scores.sensitiveScore === 2 ? '轻度' : scores.sensitiveScore <= 4 ? '中等' : '较高';
+  const acneLevel = ['较低', '轻度', '中等', '较高'][scores.acneScore] || '较高';
   const keywords = [...skinProfiles[baseKey].keywords];
   if (scores.sensitiveScore >= 2) keywords.push('屏障修护', '温和低刺激');
   if (scores.acneScore >= 2) keywords.push('控油', '减少刺激', '清洁维稳');
-  return { scores, baseKey, skinType, sensitiveLevel, acneLevel, features: skinProfiles[baseKey].features, keywords: [...new Set(keywords)] };
+  const oilValue = Math.min(100, 30 + (scores.oilyScore + scores.combinationOilyScore + scores.combinationScore) * 10);
+  const dryValue = Math.min(100, 24 + (scores.dryScore + scores.combinationDryScore + scores.combinationScore) * 11);
+  const sensitiveValue = Math.min(100, 18 + scores.sensitiveScore * 14);
+  const priorities = [
+    { key: 'barrier', title: '屏障修护方案', score: scores.sensitiveScore * 3 + scores.combinationScore, desc: '适合泛红、换季不稳、容易刺痛的人群，建议先减少刺激性功效产品，建立稳定基础护理。' },
+    { key: 'acne', title: '清爽控痘方案', score: scores.acneScore * 3 + scores.oilyScore + scores.combinationOilyScore, desc: '适合油光和闭口较明显的状态，以温和清洁、轻薄保湿和稳定控油为主。' },
+    { key: 'moisture', title: '基础保湿方案', score: scores.dryScore * 3 + scores.combinationDryScore, desc: '适合紧绷、缺水和容易起皮的状态，优先补水保湿并减少过度清洁。' },
+    { key: 'aging', title: '抗老紧致方案', score: scores.agingScore * 3, desc: '适合希望提前管理细纹与松弛的人群，在稳定屏障基础上逐步加入抗老护理。' },
+  ].sort((a, b) => b.score - a.score);
+  const primaryRecommendation = priorities[0];
+  const explanation = skinType === '混合偏敏肌'
+    ? 'T 区容易出油，但两颊稳定性较弱，近期更适合温和修护型护理。'
+    : `结合照片观察和日常状态，你近期更适合以${primaryRecommendation.title.replace('方案', '')}为主，逐步建立稳定的护理节奏。`;
+  return {
+    scores, baseKey, skinType, sensitiveLevel, acneLevel, features: skinProfiles[baseKey].features,
+    keywords: [...new Set(keywords)], oilValue, dryValue, sensitiveValue, priorities, primaryRecommendation, explanation,
+  };
 }
 
 function SkinFlowHeader({ title, onBack }) {
   return <><StatusBar /><Header title={title} onBack={onBack} /></>;
 }
 
-function SkinTestPage({ goHome, goScan }) {
+function SkinTestPage({ goHome, goCapture }) {
   return (
     <main className="page skin-flow-page skin-start-page">
       <SkinFlowHeader title="AI 智能测肤" onBack={goHome} />
-      <section className="skin-flow-intro">
+      <section className="skin-intro-copy skin-animate-in">
         <span className="skin-kicker"><Sparkles size={14} /> 30 秒轻量测试</span>
-        <h2>拍照识别 + 4 个问题<br />生成你的护肤画像</h2>
-        <p>先识别当前状态，再通过日常感受校准结果。</p>
+        <h2>30秒了解你的肤质状态</h2>
+        <p>我会结合面部照片和几个小问题，帮你判断当前肤质，并推荐更适合你的护理方案。</p>
       </section>
-      <section className="card skin-photo-card">
-        <div className="skin-face-visual"><Camera size={38} strokeWidth={1.7} /><i /><i /><i /></div>
-        <h3>先拍一张脸部照片</h3>
-        <p>AI 会先识别你的出油、泛红、痘痘等状态，再通过几个问题校准结果。</p>
-        <button className="primary-btn" onClick={goScan}><Camera size={18} /> 开始拍照测肤</button>
+      <section className="skin-intro-visual skin-animate-in">
+        <MascotHero className="skin-intro-mascot" />
+        <span className="skin-intro-orbit o1"><Droplet size={16} /></span>
+        <span className="skin-intro-orbit o2"><Sparkles size={16} /></span>
       </section>
-      <p className="skin-disclaimer">仅用于护肤建议，不作为医学诊断依据。</p>
+      <div className="skin-intro-tags skin-animate-in">
+        {[[Droplet, '肤质判断'], [Heart, '护理重点'], [ClipboardList, '方案推荐']].map(([Icon, label]) => (
+          <span key={label}><Icon size={15} /> {label}</span>
+        ))}
+      </div>
+      <footer className="skin-flow-footer">
+        <button className="primary-btn skin-flow-main-btn" onClick={goCapture}><Camera size={18} /> 开始拍照测肤</button>
+        <p className="skin-disclaimer">照片仅用于本次肤质分析，不会公开展示</p>
+      </footer>
     </main>
   );
 }
 
-function SkinScanPage({ goBack, goQuiz }) {
-  const findings = ['T 区略有油光', '两颊状态较稳定', '下巴区域有轻微闭口风险', '面部有轻微泛红迹象'];
+function SkinCapturePage({ goBack, goQuestions }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const analyzeTimeoutRef = useRef(null);
+  const cameraRequestRef = useRef(0);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const stopCamera = () => {
+    if (!streamRef.current) return;
+    streamRef.current.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+  };
+
+  async function startCamera() {
+    const requestId = ++cameraRequestRef.current;
+    stopCamera();
+    try {
+      setCameraError('');
+      setCameraReady(false);
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera API is not available');
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+        },
+        audio: false,
+      });
+
+      if (requestId !== cameraRequestRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      setCameraReady(true);
+    } catch (error) {
+      if (requestId !== cameraRequestRef.current) return;
+      console.error(error);
+      stopCamera();
+      setCameraReady(false);
+      setCameraError('无法打开摄像头，请检查浏览器权限，或使用从相册选择。');
+    }
+  }
+
+  useEffect(() => {
+    startCamera();
+
+    return () => {
+      cameraRequestRef.current += 1;
+      stopCamera();
+      if (analyzeTimeoutRef.current) clearTimeout(analyzeTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (capturedImage?.startsWith('blob:')) URL.revokeObjectURL(capturedImage);
+  }, [capturedImage]);
+
+  const handleTakePhoto = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video || !canvas || !cameraReady || !video.videoWidth || !video.videoHeight) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setCapturedImage(canvas.toDataURL('image/jpeg', 0.92));
+    cameraRequestRef.current += 1;
+    stopCamera();
+    setCameraReady(false);
+  };
+
+  const handleRetake = () => {
+    setCapturedImage(null);
+    startCamera();
+  };
+
+  const handleFile = event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const objectUrl = URL.createObjectURL(file);
+    cameraRequestRef.current += 1;
+    stopCamera();
+    setCameraReady(false);
+    setCameraError('');
+    setCapturedImage(current => {
+      if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+      return objectUrl;
+    });
+  };
+
+  const chooseFromGallery = () => {
+    if (!galleryInputRef.current) return;
+    galleryInputRef.current.value = '';
+    galleryInputRef.current.click();
+  };
+
+  const handleAnalyze = () => {
+    if (!capturedImage || isAnalyzing) return;
+    setIsAnalyzing(true);
+    analyzeTimeoutRef.current = setTimeout(goQuestions, 1500);
+  };
+
   return (
-    <main className="page skin-flow-page">
-      <SkinFlowHeader title="AI 初步识别" onBack={goBack} />
-      <section className="skin-scan-hero">
-        <div className="scan-face"><Sparkles size={30} /><span>AI</span></div>
-        <h2>识别完成</h2>
-        <p>AI 初步识别到以下皮肤状态</p>
+    <main className="page skin-flow-page skin-capture-page">
+      <SkinFlowHeader title="拍照测肤" onBack={goBack} />
+      <section className="skin-capture-intro">
+        <span className="skin-kicker"><Camera size={14} /> 正面自然光照片</span>
+        <h2>{capturedImage ? '照片已准备好' : '请将脸部放入取景框'}</h2>
+        <p>保持正脸、光线充足、不要遮挡额头和脸颊</p>
       </section>
-      <section className="card skin-findings">
-        {findings.map((item, index) => <div key={item}><span>{index + 1}</span><p>{item}</p><Check size={16} /></div>)}
+
+      <section className={`skin-capture-frame ${capturedImage ? 'has-preview' : ''}`}>
+        {capturedImage ? (
+          <img src={capturedImage} alt="测肤照片预览" />
+        ) : (
+          <>
+            <video ref={videoRef} autoPlay playsInline muted />
+            {!cameraReady && (
+              <div className="skin-capture-placeholder">
+                <div className="skin-face-guide"><Camera size={30} strokeWidth={1.8} /></div>
+                <b>{cameraError ? '摄像头暂不可用' : '正在打开前置摄像头'}</b>
+                {!cameraError && <p>请允许浏览器使用摄像头</p>}
+              </div>
+            )}
+          </>
+        )}
       </section>
-      <div className="skin-calibrate-note"><Sparkles size={16} /><p>再回答 4 个问题，让推荐更准确。</p></div>
-      <button className="primary-btn skin-flow-main-btn" onClick={goQuiz}>继续校准肤质 <ChevronRight size={17} /></button>
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      {cameraError && <p className="skin-camera-error">{cameraError}</p>}
+
+      <div className="skin-capture-actions">
+        {capturedImage ? (
+          <>
+            <button onClick={handleRetake}><Camera size={19} /> 重拍</button>
+            <button className="skin-capture-analyze-action" disabled={isAnalyzing} onClick={handleAnalyze}><Sparkles size={19} /> 拍照分析</button>
+          </>
+        ) : (
+          <>
+            <button disabled={!cameraReady} onClick={handleTakePhoto}><Camera size={19} /> 拍照</button>
+            <button onClick={chooseFromGallery}><Upload size={19} /> 从相册选择</button>
+          </>
+        )}
+      </div>
+      <input ref={galleryInputRef} className="checkin-file-input" type="file" accept="image/*" onChange={handleFile} />
+
+      <p className="skin-disclaimer">照片不会公开，仅用于本次皮肤状态分析。</p>
+      {isAnalyzing && (
+        <div className="skin-analysis-mask">
+          <div className="skin-analysis-card">
+            <span className="skin-analysis-spinner"><Sparkles size={25} /></span>
+            <h3>正在观察你的皮肤状态</h3>
+            <p>分析油光、泛红、干燥和毛孔表现…</p>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -440,47 +625,68 @@ function SkinQuizPage({ goBack, onComplete }) {
   const current = skinQuiz[question];
   return (
     <main className="page skin-flow-page skin-quiz-page">
-      <SkinFlowHeader title="肤质校准" onBack={question === 0 ? goBack : () => setQuestion(question - 1)} />
-      <div className="quiz-progress"><span>{question + 1} / 4</span><i><b style={{ width: `${(question + 1) * 25}%` }} /></i></div>
-      <section className="quiz-question">
-        <span className="skin-kicker">问题 {question + 1}</span>
+      <SkinFlowHeader title="补充几个小问题" onBack={question === 0 ? goBack : () => setQuestion(question - 1)} />
+      <div className="quiz-progress"><span>第 {question + 1} 题 / 4</span><i><b style={{ width: `${(question + 1) * 25}%` }} /></i></div>
+      <section className="quiz-question skin-animate-in" key={question}>
+        <span className="skin-kicker">帮助我更了解你的日常状态</span>
         <h2>{current.title}</h2>
         {current.hint && <p>{current.hint}</p>}
       </section>
-      <section className="quiz-options">
+      <section className="quiz-options skin-animate-in" key={`options-${question}`}>
         {current.options.map(([key, label, desc]) => (
           <button className={selected === key ? 'selected' : ''} key={key} onClick={() => choose(key)}>
             <span>{key}</span><div><b>{label}</b>{desc && <p>{desc}</p>}</div>{selected === key && <Check size={16} />}
           </button>
         ))}
       </section>
-      <button className="primary-btn skin-flow-main-btn" disabled={!selected} onClick={next}>
-        {question === 3 ? '生成护肤画像' : '下一题'} <ChevronRight size={17} />
-      </button>
+      <footer className="skin-question-footer">
+        <button className="primary-btn skin-flow-main-btn" disabled={!selected} onClick={next}>
+          {question === 3 ? '查看结果' : '下一步'} <ChevronRight size={17} />
+        </button>
+      </footer>
     </main>
   );
 }
 
-function SkinResultPage({ result, goRecommendations, restart }) {
-  const analysis = `你的皮肤属于${result.skinType}。结合拍照识别，T 区有轻微油光，两颊状态相对稳定。当前敏感等级为${result.sensitiveLevel}，痘痘风险为${result.acneLevel}，建议优先选择温和、稳定且容易坚持的护理路线。`;
+function ResultMetricCard({ label, value, text }) {
+  return (
+    <div className="result-metric-card">
+      <div><span>{label}</span><b>{text}</b></div>
+      <i><em style={{ width: `${value}%` }} /></i>
+    </div>
+  );
+}
+
+function SkinResultPage({ result, viewPlan, importVideo, restart }) {
   return (
     <main className="page skin-flow-page skin-result-page">
-      <SkinFlowHeader title="你的护肤画像" onBack={restart} />
-      <section className="skin-result-hero">
-        <span><Sparkles size={17} /> AI 已完成综合分析</span>
+      <SkinFlowHeader title="测肤结果" onBack={restart} />
+      <section className="skin-result-hero skin-animate-in">
+        <span><Sparkles size={17} /> 照片观察 + 4 题综合分析</span>
+        <p>你的肤质更接近</p>
         <h2>{result.skinType}</h2>
-        <p>{result.features.join(' · ')}</p>
+        <b>{result.explanation}</b>
       </section>
-      <section className="card result-summary-grid">
-        <div><span>肤质</span><b>{result.skinType}</b></div>
-        <div><span>敏感等级</span><b>{result.sensitiveLevel}</b></div>
-        <div><span>痘痘风险</span><b>{result.acneLevel}</b></div>
+      <section className="result-overview skin-animate-in">
+        <h3>皮肤状态概览</h3>
+        <div className="result-metrics-grid">
+          <ResultMetricCard label="出油情况" value={result.oilValue} text={result.oilValue > 60 ? '偏高' : '适中'} />
+          <ResultMetricCard label="干燥情况" value={result.dryValue} text={result.dryValue > 60 ? '偏高' : '轻度'} />
+          <ResultMetricCard label="敏感风险" value={result.sensitiveValue} text={result.sensitiveLevel} />
+          <ResultMetricCard label="当前护理重点" value={82} text={result.primaryRecommendation.title.replace('方案', '')} />
+        </div>
       </section>
-      <section className="card result-analysis"><h3><Sparkles size={16} /> AI 分析</h3><p>{analysis}</p></section>
-      <section className="result-focus"><h3>当前护肤重点</h3><div>{result.keywords.map(k => <span key={k}>{k}</span>)}</div></section>
-      <section className="skin-plan-tip"><CalendarCheck size={18} /><p>建议建立早晚护肤打卡计划，坚持 21 天观察改善效果。</p></section>
-      <button className="primary-btn skin-flow-main-btn" onClick={goRecommendations}>查看推荐方案 <ChevronRight size={17} /></button>
-      <button className="skin-restart" onClick={restart}>重新测试</button>
+      <section className="result-recommendation card skin-animate-in">
+        <span className="skin-kicker"><Heart size={14} /> 推荐护理方向</span>
+        <h3>建议优先：{result.primaryRecommendation.title}</h3>
+        <p>{result.primaryRecommendation.desc}</p>
+        <div>{result.priorities.map((item, index) => <span className={index === 0 ? 'active' : ''} key={item.key}>{item.title}</span>)}</div>
+      </section>
+      <footer className="skin-result-actions">
+        <button className="primary-btn" onClick={viewPlan}>查看推荐方案 <ChevronRight size={17} /></button>
+        <button className="skin-import-action" onClick={importVideo}><Link2 size={16} /> 导入抖音视频生成专属方案</button>
+        <button className="skin-restart" onClick={restart}>重新测肤</button>
+      </footer>
     </main>
   );
 }
@@ -1109,9 +1315,20 @@ function Header({ title, onBack, action }) {
   return <header className="header"><button onClick={onBack}><ArrowLeft size={27} /></button><h1>{title}</h1>{action || <span />}</header>;
 }
 
+const skinRouteByScreen = {
+  skintest: '/skin-test/intro',
+  'skin-capture': '/skin-test/camera',
+  'skin-quiz': '/skin-test/questions',
+  'skin-result': '/skin-test/result',
+};
+
+const skinScreenByRoute = Object.fromEntries(Object.entries(skinRouteByScreen).map(([screen, route]) => [route, screen]));
+
 function App() {
-  const [screen, setScreen] = useState('home');
-  const [skinResult, setSkinResult] = useState(null);
+  const [screen, setScreen] = useState(() => skinScreenByRoute[window.location.pathname] || 'home');
+  const [skinResult, setSkinResult] = useState(() => window.location.pathname === '/skin-test/result'
+    ? calculateSkinResult(['D', 'C', 'B', 'C'])
+    : null);
   const [checkinRecord, setCheckinRecord] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('fuji-today-checkin')) || null;
@@ -1131,6 +1348,16 @@ function App() {
     setCheckinRecord(null);
     localStorage.removeItem('fuji-today-checkin');
   };
+  useEffect(() => {
+    const route = skinRouteByScreen[screen];
+    const nextPath = route || '/';
+    if (window.location.pathname !== nextPath) window.history.pushState({ screen }, '', nextPath);
+  }, [screen]);
+  useEffect(() => {
+    const onPopState = () => setScreen(skinScreenByRoute[window.location.pathname] || 'home');
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const currentTab = useMemo(() => {
     if (screen === 'checkin' || screen === 'record') return 'checkin';
     if (screen === 'ranking') return 'ranking';
@@ -1143,10 +1370,10 @@ function App() {
     <div className="app-shell">
       <div className={`phone ${screen === 'home' ? 'home-phone' : ''}`}>
         {screen === 'home' && <HomePage goPlan={goPlan} goSkinTest={() => setScreen('skintest')} />}
-        {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goScan={() => setScreen('skin-scan')} />}
-        {screen === 'skin-scan' && <SkinScanPage goBack={() => setScreen('skintest')} goQuiz={() => setScreen('skin-quiz')} />}
-        {screen === 'skin-quiz' && <SkinQuizPage goBack={() => setScreen('skin-scan')} onComplete={result => { setSkinResult(result); setScreen('skin-result'); }} />}
-        {screen === 'skin-result' && skinResult && <SkinResultPage result={skinResult} goRecommendations={() => setScreen('skin-recommendations')} restart={() => setScreen('skintest')} />}
+        {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goCapture={() => setScreen('skin-capture')} />}
+        {screen === 'skin-capture' && <SkinCapturePage goBack={() => setScreen('skintest')} goQuestions={() => setScreen('skin-quiz')} />}
+        {screen === 'skin-quiz' && <SkinQuizPage goBack={() => setScreen('skin-capture')} onComplete={result => { setSkinResult(result); setScreen('skin-result'); }} />}
+        {screen === 'skin-result' && skinResult && <SkinResultPage result={skinResult} viewPlan={goPlan} importVideo={() => setScreen('home')} restart={() => setScreen('skintest')} />}
         {screen === 'skin-recommendations' && skinResult && <SkinRecommendationsPage result={skinResult} goBack={() => setScreen('skin-result')} goPlan={goPlan} />}
         {screen === 'plan' && <PlanDetailPage goHome={() => setScreen('home')} goEdit={() => setScreen('edit')} goCheckin={() => setScreen('checkin')} single />}
         {screen === 'edit' && <EditPlanPage goPlan={() => setScreen('plan')} />}
@@ -1154,7 +1381,7 @@ function App() {
         {screen === 'record' && <CheckinRecordPage record={checkinRecord} goCheckin={() => setScreen('checkin')} goPlan={() => setScreen('plan')} />}
         {screen === 'ranking' && <RankingPage />}
         {screen === 'profile' && <ProfilePage goPlan={goPlan} goRecord={() => setScreen('record')} />}
-        {!['edit', 'record', 'skintest', 'skin-scan', 'skin-quiz', 'skin-result', 'skin-recommendations'].includes(screen) && <BottomNav tab={currentTab} setTab={setTab} />}
+        {!['edit', 'record', 'skintest', 'skin-capture', 'skin-quiz', 'skin-result', 'skin-recommendations'].includes(screen) && <BottomNav tab={currentTab} setTab={setTab} />}
       </div>
     </div>
   );
