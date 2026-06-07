@@ -43,3 +43,12 @@ npm run dev
 cd backend
 uvicorn app:app --reload
 ```
+
+## Railway Deploy
+
+Railway 鐨勬瀯寤哄鏋滄槸浠撳簱鏍圭洰褰曞紑濮嬶紝鐜板湪涔熷彲浠ョ洿鎺ラ儴缃层€?
+
+- 鏍圭洰褰?`requirements.txt` 浼氬紩鐢?`backend/requirements.txt`
+- 鏍圭洰褰?`Procfile` 浼氳嚜鍔ㄨ繘鍏?`backend/` 鍚姩 FastAPI
+
+涔熷氨鏄锛屼綘鍙互缁х画鎶?Railway 鐨?Root Directory 璁句负 `backend/`锛屼篃鍙互涓嶈锛屼袱绉嶉兘鑳藉伐浣溿€?
