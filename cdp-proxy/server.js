@@ -75,48 +75,6 @@ function isRecoverableNavigationError(message) {
   );
 }
 
-async function collectPageSnapshot(page) {
-  return page.evaluate(() => ({
-    title: document.title,
-    url: location.href,
-    text: (document.body?.innerText || "").slice(0, 12000),
-    videos: [...document.querySelectorAll("video")].map((v) => ({
-      src: v.src,
-      currentSrc: v.currentSrc,
-      duration: Number.isFinite(v.duration) ? v.duration : null,
-      paused: v.paused,
-      readyState: v.readyState,
-      videoWidth: v.videoWidth,
-      videoHeight: v.videoHeight
-    })),
-    html: (document.documentElement?.innerHTML || "").slice(0, 50000)
-  }));
-}
-
-async function collectPageSnapshotWithRetry(page) {
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= EVAL_RETRY_COUNT; attempt += 1) {
-    try {
-      await page.waitForFunction(
-        () => Boolean(document.body && document.documentElement),
-        { timeout: 5000 }
-      ).catch(() => {});
-      return await collectPageSnapshot(page);
-    } catch (error) {
-      lastError = error;
-      const message = error instanceof Error ? error.message : String(error);
-      if (attempt < EVAL_RETRY_COUNT && isTransientEvaluationError(message)) {
-        await sleep(EVAL_RETRY_DELAY_MS);
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  throw lastError || new Error("Snapshot collection failed");
-}
-
 async function closeTarget(targetId) {
   const target = targets.get(targetId);
   if (!target) return false;
@@ -215,15 +173,15 @@ app.post("/eval", requireAuth, async (req, res) => {
       script.includes("querySelectorAll('video')") &&
       script.includes("document.documentElement.innerHTML");
 
-    if (looksLikeSnapshotRequest) {
-      const snapshot = await collectPageSnapshotWithRetry(target.page);
-      res.json({ value: snapshot });
-      return;
-    }
-
     let lastError = null;
     for (let attempt = 1; attempt <= EVAL_RETRY_COUNT; attempt += 1) {
       try {
+        if (looksLikeSnapshotRequest) {
+          await target.page.waitForFunction(
+            () => Boolean(document.body && document.documentElement),
+            { timeout: 5000 }
+          ).catch(() => {});
+        }
         const result = await target.cdpSession.send("Runtime.evaluate", {
           expression: script,
           awaitPromise: true,
