@@ -59,6 +59,24 @@ function isTransientEvaluationError(message) {
   );
 }
 
+async function collectPageSnapshot(page) {
+  return page.evaluate(() => ({
+    title: document.title,
+    url: location.href,
+    text: (document.body?.innerText || "").slice(0, 12000),
+    videos: [...document.querySelectorAll("video")].map((v) => ({
+      src: v.src,
+      currentSrc: v.currentSrc,
+      duration: Number.isFinite(v.duration) ? v.duration : null,
+      paused: v.paused,
+      readyState: v.readyState,
+      videoWidth: v.videoWidth,
+      videoHeight: v.videoHeight
+    })),
+    html: (document.documentElement?.innerHTML || "").slice(0, 50000)
+  }));
+}
+
 async function closeTarget(targetId) {
   const target = targets.get(targetId);
   if (!target) return false;
@@ -131,6 +149,17 @@ app.post("/eval", requireAuth, async (req, res) => {
   }
 
   try {
+    const looksLikeSnapshotRequest =
+      script.includes("document.title") &&
+      script.includes("querySelectorAll('video')") &&
+      script.includes("document.documentElement.innerHTML");
+
+    if (looksLikeSnapshotRequest) {
+      const snapshot = await collectPageSnapshot(target.page);
+      res.json({ value: snapshot });
+      return;
+    }
+
     let lastError = null;
     for (let attempt = 1; attempt <= EVAL_RETRY_COUNT; attempt += 1) {
       try {
