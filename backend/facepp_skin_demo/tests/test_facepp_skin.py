@@ -78,6 +78,33 @@ class FacePPSkinTests(unittest.TestCase):
         self.assertEqual(context.exception.error_message, "NO_FACE_FOUND")
         self.assertEqual(context.exception.status_code, 400)
 
+    def test_analyze_image_reads_credentials_from_local_dotenv_when_env_is_missing(self):
+        from facepp_skin import FACEPP_API_KEY_ENV, FACEPP_API_SECRET_ENV, analyze_image
+
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {"request_id": "req-1", "result": {"skin_type": 1}}
+        session = Mock()
+        session.post.return_value = response
+
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path = Path(tmp) / "face.jpg"
+            dotenv_path = Path(tmp) / ".env"
+            write_test_jpeg(image_path)
+            dotenv_path.write_text(
+                f"{FACEPP_API_KEY_ENV}=dotenv-api-key\n{FACEPP_API_SECRET_ENV}=dotenv-api-secret\n",
+                encoding="utf-8",
+            )
+
+            with patch("facepp_skin.DOTENV_PATH", dotenv_path, create=True):
+                with patch.dict("os.environ", {}, clear=True):
+                    analyze_image(image_path, session=session)
+
+        self.assertEqual(
+            session.post.call_args.kwargs["data"],
+            {"api_key": "dotenv-api-key", "api_secret": "dotenv-api-secret"},
+        )
+
     def test_analyze_image_reencodes_upload_to_jpeg_even_when_extension_is_jpg(self):
         from PIL import Image
 

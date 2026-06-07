@@ -10,6 +10,7 @@ from PIL import Image, ImageOps
 FACEPP_API_KEY_ENV = "FACEPP_API_KEY"
 FACEPP_API_SECRET_ENV = "FACEPP_API_SECRET"
 FACEPP_SKIN_ANALYZE_URL = "https://api-cn.faceplusplus.com/facepp/v1/skinanalyze"
+DOTENV_PATH = Path(__file__).with_name(".env")
 
 
 class FacePPError(RuntimeError):
@@ -77,11 +78,26 @@ def analyze_image(image_path: Path, *, session: requests.Session | None = None) 
 
 
 def _facepp_credentials() -> tuple[str, str]:
-    api_key = os.environ.get(FACEPP_API_KEY_ENV, "")
-    api_secret = os.environ.get(FACEPP_API_SECRET_ENV, "")
+    dotenv = _read_dotenv(DOTENV_PATH)
+    api_key = os.environ.get(FACEPP_API_KEY_ENV) or dotenv.get(FACEPP_API_KEY_ENV, "")
+    api_secret = os.environ.get(FACEPP_API_SECRET_ENV) or dotenv.get(FACEPP_API_SECRET_ENV, "")
     if not api_key or not api_secret:
         raise RuntimeError(f"{FACEPP_API_KEY_ENV} and {FACEPP_API_SECRET_ENV} must be set")
     return api_key, api_secret
+
+
+def _read_dotenv(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
 
 
 def normalize_image_for_facepp(image_path: Path, *, max_edge: int = 1600) -> io.BytesIO:
