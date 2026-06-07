@@ -1321,9 +1321,8 @@ h1, h2, h3 { font-weight: 650; }
   padding-bottom:max(24px, env(safe-area-inset-bottom));
   background:linear-gradient(180deg, #fdeef2 0%, #fff7fa 34%, #fff 58%);
 }
-.parsing-intro { flex-shrink:0; padding:8px 2px 14px; text-align:center; }
-.parsing-intro h2 { margin:10px 0 6px; font-family:var(--serif); font-size:24px; font-weight:600; color:#5c3f48; }
-.parsing-intro p { margin:0 auto; max-width:300px; color:var(--muted); font-size:13px; line-height:1.65; }
+.parsing-intro { flex-shrink:0; padding:6px 2px 12px; text-align:center; }
+.parsing-intro p { margin:8px auto 0; max-width:300px; color:var(--muted); font-size:13px; line-height:1.65; }
 .parsing-card {
   flex-shrink:0;
   margin-top:4px;
@@ -1350,13 +1349,41 @@ h1, h2, h3 { font-weight: 650; }
   object-fit:cover;
 }
 .parsing-step-text {
-  margin:16px 0 14px;
+  margin:16px 0 12px;
   min-height:22px;
   color:#7a5561;
   font-size:14px;
   font-weight:600;
   letter-spacing:.02em;
   animation:skinRise .35s ease both;
+}
+.parsing-tip-card {
+  margin:0 0 16px;
+  padding:12px 14px;
+  border-radius:20px;
+  text-align:left;
+  background:rgba(255,255,255,.78);
+  border:1px solid rgba(255,130,170,.16);
+  box-shadow:0 10px 22px rgba(255,120,160,.10);
+  animation:tipFadeIn .45s ease both;
+}
+.tip-label {
+  display:flex;
+  align-items:center;
+  gap:5px;
+  margin-bottom:5px;
+  color:#f06292;
+  font-size:12.5px;
+  font-weight:600;
+}
+.tip-text {
+  font-size:13px;
+  line-height:1.6;
+  color:#6f5861;
+}
+@keyframes tipFadeIn {
+  from { opacity:0; transform:translateY(8px); }
+  to { opacity:1; transform:translateY(0); }
 }
 .parsing-progress-track {
   width:100%;

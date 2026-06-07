@@ -61,6 +61,19 @@ const parsingSteps = [
   '正在生成可执行方案…',
 ];
 
+const skinTips = [
+  '小提示：新方案开始前，先别急着叠加太多功效产品。',
+  '小提示：敏感不稳定时，先把步骤变简单，皮肤更容易适应。',
+  '小提示：同一套方案建议坚持一段时间，再判断是否适合自己。',
+  '小提示：每天在相似光线下拍照，更容易看出肤况变化。',
+  '小提示：刷到的视频可以参考，但更重要的是适合自己的节奏。',
+  '小提示：早晚步骤不用完全一样，晚间更适合认真修护。',
+  '小提示：如果新产品上脸刺痛明显，建议先暂停观察。',
+  '小提示：比起买更多产品，先把使用顺序理清楚更重要。',
+  '小提示：肤况会随作息、季节变化，方案也可以随时调整。',
+  '小提示：坚持记录 21 天，更容易发现真实变化。',
+];
+
 function getTodayDateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -947,6 +960,7 @@ function SkinRecommendationsPage({ result, goBack, goPlan }) {
 function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
   const [progress, setProgress] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
+  const [tipIndex, setTipIndex] = useState(0);
   const videoRef = useRef(null);
   const onCompleteRef = useRef(onComplete);
 
@@ -1034,6 +1048,14 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
   }, [sourceLink]);
 
   useEffect(() => {
+    const tipTimer = setInterval(() => {
+      setTipIndex(prev => (prev + 1) % skinTips.length);
+    }, 3000);
+
+    return () => clearInterval(tipTimer);
+  }, []);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return undefined;
     const play = () => video.play().catch(() => {});
@@ -1059,7 +1081,6 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
       <Header title="正在解析视频内容" onBack={onBack} />
       <section className="parsing-intro skin-animate-in">
         <span className="skin-kicker"><Sparkles size={14} /> 视频解析中</span>
-        <h2>正在解析视频内容</h2>
         <p>我正在把视频里的护肤经验，整理成你的专属方案</p>
       </section>
 
@@ -1076,6 +1097,10 @@ function ParsingVideoPage({ sourceLink, onComplete, onBack }) {
           />
         </div>
         <p className="parsing-step-text">{parsingSteps[stepIndex]}</p>
+        <div className="parsing-tip-card" key={tipIndex}>
+          <div className="tip-label"><Sparkles size={13} strokeWidth={2.2} /> 护肤小提示</div>
+          <div className="tip-text">{skinTips[tipIndex].replace(/^小提示：/, '')}</div>
+        </div>
         <div className="parsing-progress-track">
           <span className="parsing-progress-bar" style={{ width: `${Math.min(100, progress)}%` }} />
         </div>
