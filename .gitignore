@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+*.mp4
+*.wav
+frames*/
+model_outputs/
+skincare_outputs/
+.superpowers/
+.idea/
+.vscode/
