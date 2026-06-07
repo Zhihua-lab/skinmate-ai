@@ -77,6 +77,30 @@ async function collectPageSnapshot(page) {
   }));
 }
 
+async function collectPageSnapshotWithRetry(page) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= EVAL_RETRY_COUNT; attempt += 1) {
+    try {
+      await page.waitForFunction(
+        () => Boolean(document.body && document.documentElement),
+        { timeout: 5000 }
+      ).catch(() => {});
+      return await collectPageSnapshot(page);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < EVAL_RETRY_COUNT && isTransientEvaluationError(message)) {
+        await sleep(EVAL_RETRY_DELAY_MS);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError || new Error("Snapshot collection failed");
+}
+
 async function closeTarget(targetId) {
   const target = targets.get(targetId);
   if (!target) return false;
@@ -155,7 +179,7 @@ app.post("/eval", requireAuth, async (req, res) => {
       script.includes("document.documentElement.innerHTML");
 
     if (looksLikeSnapshotRequest) {
-      const snapshot = await collectPageSnapshot(target.page);
+      const snapshot = await collectPageSnapshotWithRetry(target.page);
       res.json({ value: snapshot });
       return;
     }
