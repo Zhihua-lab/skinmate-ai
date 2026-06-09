@@ -1,3 +1,5 @@
+import { resolveAnalyzeEndpoint } from './apiEndpoints';
+
 const STEP_TONES = ['blue', 'green', 'purple', 'orange'];
 
 const CATEGORY_RULES = [
@@ -139,13 +141,8 @@ function formatApiError(data, status) {
   return `视频解析失败（HTTP ${status || '未知'}），请稍后重试`;
 }
 
-function resolveAnalyzeEndpoint() {
-  const apiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
-  return apiBase ? `${apiBase}/analyze-video` : '/api/analyze-video';
-}
-
 export async function analyzeVideoUrl(url) {
-  const endpoint = resolveAnalyzeEndpoint();
+  const endpoint = resolveAnalyzeEndpoint(import.meta.env.VITE_API_BASE || '', import.meta.env.PROD);
   let response;
 
   try {

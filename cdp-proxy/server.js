@@ -9,13 +9,6 @@ const PAGE_TIMEOUT_MS = Number(process.env.CDP_PAGE_TIMEOUT_MS || 60000);
 const HEADLESS_MODE = process.env.CDP_HEADLESS || "new";
 const EVAL_RETRY_COUNT = Number(process.env.CDP_EVAL_RETRY_COUNT || 5);
 const EVAL_RETRY_DELAY_MS = Number(process.env.CDP_EVAL_RETRY_DELAY_MS || 750);
-const NAVIGATION_WAIT_UNTIL = process.env.CDP_WAIT_UNTIL || "domcontentloaded";
-const POST_GOTO_SETTLE_MS = Number(process.env.CDP_POST_GOTO_SETTLE_MS || 2500);
-const DEFAULT_USER_AGENT =
-  process.env.CDP_USER_AGENT ||
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
-const SNAPSHOT_HTML_LIMIT = Number(process.env.CDP_SNAPSHOT_HTML_LIMIT || 200000);
-const SNAPSHOT_TEXT_LIMIT = Number(process.env.CDP_SNAPSHOT_TEXT_LIMIT || 20000);
 
 const app = express();
 app.use(express.text({ type: "*/*", limit: "512kb" }));
@@ -66,15 +59,35 @@ function isTransientEvaluationError(message) {
   );
 }
 
-function isRecoverableNavigationError(message) {
-  const text = message.toLowerCase();
+export function isSnapshotRequest(script) {
   return (
-    text.includes("timeout") ||
-    text.includes("net::err") ||
-    text.includes("navigation") ||
-    text.includes("frame was detached") ||
-    text.includes("target closed")
+    script.includes("document.title") &&
+    script.includes("querySelectorAll") &&
+    script.includes("video") &&
+    script.includes("document.documentElement.innerHTML")
   );
+}
+
+async function collectPageSnapshot(page) {
+  return page.evaluate(() => ({
+    title: document.title,
+    url: location.href,
+    text: (document.body?.innerText || "").slice(0, 12000),
+    videos: [...document.querySelectorAll("video")].map((v) => ({
+      src: v.src,
+      currentSrc: v.currentSrc,
+      duration: Number.isFinite(v.duration) ? v.duration : null,
+      paused: v.paused,
+      readyState: v.readyState,
+      videoWidth: v.videoWidth,
+      videoHeight: v.videoHeight
+    })),
+    resources: performance.getEntriesByType("resource")
+      .map((resource) => resource.name)
+      .filter((name) => /douyinvod|mime_type=video|\.mp4|\/video\//i.test(name))
+      .slice(-100),
+    html: (document.documentElement?.innerHTML || "").slice(0, 50000)
+  }));
 }
 
 async function closeTarget(targetId) {
@@ -110,38 +123,17 @@ app.get("/new", requireAuth, async (req, res) => {
   try {
     const browser = await getBrowser();
     const page = await browser.newPage();
-    await page.setUserAgent(DEFAULT_USER_AGENT);
-    await page.setViewport({ width: 1440, height: 900 });
     page.setDefaultNavigationTimeout(PAGE_TIMEOUT_MS);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: PAGE_TIMEOUT_MS });
+    await page.waitForFunction(
+      () => Boolean(document.body && document.documentElement),
+      { timeout: 10000 }
+    ).catch(() => {});
     const cdpSession = await page.target().createCDPSession();
     await cdpSession.send("Runtime.enable");
     const targetId = crypto.randomUUID();
-    let navigationWarning = null;
-
-    try {
-      await page.goto(url, { waitUntil: NAVIGATION_WAIT_UNTIL, timeout: PAGE_TIMEOUT_MS });
-      await page.waitForFunction(
-        () => Boolean(document.body && document.documentElement),
-        { timeout: 10000 }
-      ).catch(() => {});
-      if (POST_GOTO_SETTLE_MS > 0) {
-        await sleep(POST_GOTO_SETTLE_MS);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!isRecoverableNavigationError(message)) {
-        throw error;
-      }
-      navigationWarning = message;
-      console.warn("cdp-proxy /new navigation warning", {
-        targetId,
-        url,
-        warning: message
-      });
-    }
-
     targets.set(targetId, { page, cdpSession });
-    res.json({ targetId, warning: navigationWarning });
+    res.json({ targetId });
   } catch (error) {
     console.error("cdp-proxy /new failed", {
       url,
@@ -153,15 +145,7 @@ app.get("/new", requireAuth, async (req, res) => {
 
 app.post("/eval", requireAuth, async (req, res) => {
   const targetId = String(req.query.target || "").trim();
-  const rawBody = req.body;
-  const script =
-    typeof rawBody === "string"
-      ? rawBody.trim()
-      : Buffer.isBuffer(rawBody)
-        ? rawBody.toString("utf8").trim()
-        : rawBody && typeof rawBody === "object" && typeof rawBody.script === "string"
-          ? rawBody.script.trim()
-          : "";
+  const script = String(req.body || "").trim();
   if (!targetId) {
     res.status(400).json({ error: "target is required" });
     return;
@@ -178,49 +162,17 @@ app.post("/eval", requireAuth, async (req, res) => {
   }
 
   try {
-    const looksLikeSnapshotRequest =
-      script.includes("document.title") &&
-      script.includes("querySelectorAll('video')") &&
-      script.includes("document.documentElement.innerHTML");
+    if (String(req.query.snapshot || "") === "1" || isSnapshotRequest(script)) {
+      const snapshot = await collectPageSnapshot(target.page);
+      res.json({ value: snapshot });
+      return;
+    }
 
     let lastError = null;
     for (let attempt = 1; attempt <= EVAL_RETRY_COUNT; attempt += 1) {
       try {
-        if (looksLikeSnapshotRequest) {
-          await target.page.waitForFunction(
-            () => Boolean(document.body && document.documentElement),
-            { timeout: 5000 }
-          ).catch(() => {});
-        }
         const result = await target.cdpSession.send("Runtime.evaluate", {
-          expression: looksLikeSnapshotRequest
-            ? `JSON.stringify({
-                title: document.title,
-                url: location.href,
-                text: (document.body?.innerText || "").slice(0, ${SNAPSHOT_TEXT_LIMIT}),
-                videos: [...document.querySelectorAll("video")].map((v) => ({
-                  src: v.src,
-                  currentSrc: v.currentSrc,
-                  poster: v.poster,
-                  duration: Number.isFinite(v.duration) ? v.duration : null,
-                  paused: v.paused,
-                  readyState: v.readyState,
-                  videoWidth: v.videoWidth,
-                  videoHeight: v.videoHeight,
-                  dataset: { ...v.dataset },
-                  attrs: Object.fromEntries([...v.attributes].map((attr) => [attr.name, attr.value]))
-                })),
-                mediaUrls: [...document.querySelectorAll("source, video, a")].map((el) => ({
-                  tag: el.tagName,
-                  src: el.currentSrc || el.src || el.href || "",
-                  attrs: Object.fromEntries([...el.attributes].map((attr) => [attr.name, attr.value]))
-                })).filter((item) => item.src),
-                scripts: [...document.querySelectorAll("script[type='application/json'], script[type='application/ld+json']")]
-                  .map((el) => (el.textContent || "").slice(0, 20000))
-                  .filter(Boolean),
-                html: (document.documentElement?.outerHTML || "").slice(0, ${SNAPSHOT_HTML_LIMIT})
-              })`
-            : script,
+          expression: script,
           awaitPromise: true,
           returnByValue: true
         });

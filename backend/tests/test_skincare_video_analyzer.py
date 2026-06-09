@@ -206,6 +206,23 @@ class SkincareVideoAnalyzerTests(unittest.TestCase):
 
         self.assertEqual(extract_video_sources_from_snapshot(snapshot), ["https://v11.douyinvod.com/video.mp4"])
 
+    def test_extract_video_sources_from_snapshot_reads_performance_resources(self):
+        from skincare_video_analyzer import extract_video_sources_from_snapshot
+
+        snapshot = {
+            "videos": [],
+            "resources": [
+                "https://p3-pc.douyinpic.com/img/poster.jpeg",
+                "https://v26-web.douyinvod.com/video/tos/cn/tos-cn-ve-15/o123?mime_type=video_mp4",
+            ],
+            "html": "",
+        }
+
+        self.assertEqual(
+            extract_video_sources_from_snapshot(snapshot),
+            ["https://v26-web.douyinvod.com/video/tos/cn/tos-cn-ve-15/o123?mime_type=video_mp4"],
+        )
+
     def test_pick_video_source_rejects_missing_video(self):
         from skincare_video_analyzer import pick_video_source
 

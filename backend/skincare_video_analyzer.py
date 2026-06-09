@@ -11,10 +11,6 @@ from urllib.parse import parse_qs, quote, urlparse
 import requests
 from PIL import Image
 import imageio.v3 as iio
-from dotenv import load_dotenv
-
-
-load_dotenv()
 
 DEFAULT_PROVIDER = os.getenv("LLM_PROVIDER", "").strip().lower() or "dashscope"
 DEFAULT_CHAT_URLS = {
@@ -217,45 +213,23 @@ def extract_video_sources_from_snapshot(snapshot: dict[str, Any]) -> list[str]:
     def is_video_like(source: str) -> bool:
         return "douyinvod" in source or ".mp4" in source or "mime_type=video_mp4" in source or "/video/" in source
 
-    def collect_candidate(value: Any, bucket: list[str]) -> None:
-        if isinstance(value, str) and value.startswith("http") and is_video_like(value):
-            bucket.append(value)
-
     video_candidates: list[str] = []
     for video in snapshot.get("videos", []):
         if not isinstance(video, dict):
             continue
         for key in ("currentSrc", "src"):
-            collect_candidate(video.get(key), video_candidates)
-        collect_candidate(video.get("poster"), video_candidates)
-
-        attrs = video.get("attrs")
-        if isinstance(attrs, dict):
-            for value in attrs.values():
-                collect_candidate(value, video_candidates)
-
-    for media in snapshot.get("mediaUrls", []):
-        if not isinstance(media, dict):
-            continue
-        collect_candidate(media.get("src"), video_candidates)
-        attrs = media.get("attrs")
-        if isinstance(attrs, dict):
-            for value in attrs.values():
-                collect_candidate(value, video_candidates)
+            value = video.get(key)
+            if isinstance(value, str) and value.startswith("http") and is_video_like(value):
+                video_candidates.append(value)
 
     candidates = video_candidates
+    for resource in snapshot.get("resources", []):
+        if isinstance(resource, str) and resource.startswith("http") and is_video_like(resource):
+            candidates.append(resource)
     html = snapshot.get("html")
     if not candidates and isinstance(html, str):
         candidates.extend(re.findall(r"https?://[^\"'<>\\\s]+\.mp4[^\"'<>\\\s]*", html))
         candidates.extend(re.findall(r"https?://[^\"'<>\\\s]+douyinvod[^\"'<>\\\s]+", html))
-        candidates.extend(re.findall(r"https?://[^\"'<>\\\s]+mime_type=video_mp4[^\"'<>\\\s]*", html))
-
-    for script_text in snapshot.get("scripts", []):
-        if not isinstance(script_text, str):
-            continue
-        candidates.extend(re.findall(r"https?://[^\"'<>\\\s]+\.mp4[^\"'<>\\\s]*", script_text))
-        candidates.extend(re.findall(r"https?://[^\"'<>\\\s]+douyinvod[^\"'<>\\\s]+", script_text))
-        candidates.extend(re.findall(r"https?://[^\"'<>\\\s]+mime_type=video_mp4[^\"'<>\\\s]*", script_text))
 
     unique_sources: list[str] = []
     seen: set[str] = set()
@@ -365,14 +339,10 @@ def fetch_douyin_snapshot_with_cdp(
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
             try:
-                eval_headers = {
-                    **headers,
-                    "Content-Type": "text/plain; charset=utf-8",
-                }
                 eval_response = client.post(
-                    f"{proxy_url}/eval?target={target_id}",
-                    headers=eval_headers,
-                    data=script.encode("utf-8"),
+                    f"{proxy_url}/eval?target={target_id}&snapshot=1",
+                    headers=headers,
+                    data=script,
                     timeout=30,
                 )
                 eval_response.raise_for_status()

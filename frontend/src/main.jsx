@@ -54,6 +54,7 @@ const LOCAL_CHECKIN_KEY = 'fuji-today-checkin';
 const PENDING_DOUYIN_LINK_KEY = 'pendingDouyinLink';
 const GENERATED_PLAN_KEY = 'currentGeneratedPlan';
 const MOCK_PARSE_DURATION = 18000;
+const MOCK_PARSE_MIN_DURATION = 3500;
 
 const parsingSteps = [
   '正在识别视频重点…',
@@ -891,14 +892,11 @@ function SkinQuizPage({ goBack, onComplete }) {
   const [question, setQuestion] = useState(0);
   const [answers, setAnswers] = useState([]);
   const selected = answers[question];
-  const choose = value => setAnswers(prev => {
-    const next = [...prev];
-    next[question] = value;
-    return next;
-  });
-  const next = () => {
-    if (!selected) return;
-    if (question === skinQuiz.length - 1) onComplete(calculateSkinResult(answers));
+  const choose = value => {
+    const nextAnswers = [...answers];
+    nextAnswers[question] = value;
+    setAnswers(nextAnswers);
+    if (question === skinQuiz.length - 1) onComplete(calculateSkinResult(nextAnswers));
     else setQuestion(question + 1);
   };
   const current = skinQuiz[question];
@@ -919,11 +917,6 @@ function SkinQuizPage({ goBack, onComplete }) {
           </button>
         ))}
       </section>
-      <footer className="skin-question-footer">
-        <button className="primary-btn skin-flow-main-btn" disabled={!selected} onClick={next}>
-          {question === 3 ? '查看结果' : '下一步'} <ChevronRight size={17} />
-        </button>
-      </footer>
     </main>
   );
 }
@@ -1061,7 +1054,13 @@ function ParsingVideoPage({ sourceLink, skinResult, onComplete, onBack }) {
     };
 
     const run = async () => {
-      await new Promise(resolve => window.setTimeout(resolve, MOCK_PARSE_DURATION));
+      if (!apiResult && !apiError) {
+        await apiPromise;
+      }
+      if (cancelled) return;
+
+      const waitTime = apiResult ? MOCK_PARSE_MIN_DURATION : MOCK_PARSE_DURATION;
+      await new Promise(resolve => window.setTimeout(resolve, waitTime));
       if (cancelled) return;
 
       const resolved = resolvePlanForDemo(sourceLink, apiResult, skinResult, planSteps);
@@ -1526,7 +1525,7 @@ function isAdjustRequest(text) {
   return editAdjustKeywords.some(kw => text.includes(kw));
 }
 
-function EditPlanPage({ goPlan, currentPlan = planSteps, currentPlanMeta = null, onPlanUpdated }) {
+function EditPlanPage({ goPlan, goBack, currentPlan = planSteps, currentPlanMeta = null, onPlanUpdated }) {
   const [messages, setMessages] = useState(editInitialMessages);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -1607,7 +1606,7 @@ function EditPlanPage({ goPlan, currentPlan = planSteps, currentPlanMeta = null,
   };
   return (
     <main className="page edit-page">
-      <Header title="修改方案" onBack={goPlan} />
+      <Header title="修改方案" onBack={goBack} />
 
       <div className="edit-assistant">
         <div className="edit-assistant-avatar">
@@ -2118,6 +2117,7 @@ const appRouteByScreen = {
   home: '/',
   parsing: '/parsing',
   plan: '/plan-detail',
+  edit: '/edit',
   skintest: '/skin-test/intro',
   'skin-capture': '/skin-test/camera',
   'skin-quiz': '/skin-test/questions',
@@ -2238,7 +2238,7 @@ function App() {
         {screen === 'skintest' && <SkinTestPage goHome={() => setScreen('home')} goCapture={() => setScreen('skin-capture')} />}
         {screen === 'skin-capture' && <SkinCapturePage goBack={() => setScreen('skintest')} goQuestions={() => setScreen('skin-quiz')} />}
         {screen === 'skin-quiz' && <SkinQuizPage goBack={() => setScreen('skin-capture')} onComplete={result => { setSkinResult(result); setScreen('skin-result'); }} />}
-        {screen === 'skin-result' && skinResult && <SkinResultPage result={skinResult} viewPlan={goPlan} importVideo={() => setScreen('home')} restart={() => setScreen('skintest')} />}
+        {screen === 'skin-result' && skinResult && <SkinResultPage result={skinResult} viewPlan={() => goPlan(null, { type: 'default' })} importVideo={() => setScreen('home')} restart={() => setScreen('skintest')} />}
         {screen === 'skin-recommendations' && skinResult && <SkinRecommendationsPage result={skinResult} goBack={() => setScreen('skin-result')} goPlan={goPlan} />}
         {screen === 'plan' && (
           <PlanDetailPage
@@ -2253,6 +2253,7 @@ function App() {
         {screen === 'edit' && (
           <EditPlanPage
             goPlan={goPlan}
+            goBack={() => setScreen('plan')}
             currentPlan={activePlan || savedGeneratedPlan?.plan || planSteps}
             currentPlanMeta={planMeta || savedGeneratedPlan?.meta}
             onPlanUpdated={plan => setActivePlan(plan)}

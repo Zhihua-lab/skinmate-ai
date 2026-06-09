@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +10,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-load_dotenv()
+if "pytest" not in sys.modules:
+    load_dotenv()
 
-from skincare_video_analyzer import build_llm_headers, get_llm_api_key, get_llm_chat_url
+from skincare_video_analyzer import get_llm_api_key
 from skincare_web_app import run_url_analysis
+
+PLAN_EDIT_LLM_DEFAULT_URL = "https://api.deepseek.com/chat/completions"
+PLAN_EDIT_LLM_DEFAULT_MODEL = "deepseek-v4-flash"
 
 app = FastAPI(title="Skincare AI Backend", version="1.0.0")
 app.add_middleware(
@@ -90,6 +95,24 @@ def json_safe(value: Any) -> str:
     return str(value)
 
 
+def get_plan_edit_llm_api_key() -> str:
+    api_key = os.getenv("PLAN_EDIT_LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("LLM_API_KEY")
+    if not api_key or not api_key.strip():
+        raise RuntimeError("PLAN_EDIT_LLM_API_KEY is not set")
+    return api_key.strip()
+
+
+def get_plan_edit_llm_chat_url() -> str:
+    return os.getenv("PLAN_EDIT_LLM_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL") or PLAN_EDIT_LLM_DEFAULT_URL
+
+
+def build_plan_edit_llm_headers() -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {get_plan_edit_llm_api_key()}",
+        "Content-Type": "application/json",
+    }
+
+
 def build_revise_plan_prompt(
     *,
     plan: list[dict[str, Any]],
@@ -121,7 +144,7 @@ def request_revised_plan(
     plan_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = {
-        "model": os.getenv("LLM_MODEL") or os.getenv("DASHSCOPE_MODEL") or "deepseek-v4-flash",
+        "model": os.getenv("PLAN_EDIT_LLM_MODEL") or os.getenv("DEEPSEEK_MODEL") or PLAN_EDIT_LLM_DEFAULT_MODEL,
         "messages": [
             {
                 "role": "user",
@@ -138,8 +161,8 @@ def request_revised_plan(
     }
 
     response = requests.post(
-        get_llm_chat_url(),
-        headers=build_llm_headers(),
+        get_plan_edit_llm_chat_url(),
+        headers=build_plan_edit_llm_headers(),
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         timeout=120,
     )
@@ -192,7 +215,7 @@ def analyze_video(payload: AnalyzeVideoRequest) -> dict[str, Any]:
 @app.post("/revise-plan")
 def revise_plan(payload: RevisePlanRequest) -> dict[str, Any]:
     try:
-        get_llm_api_key()
+        get_plan_edit_llm_api_key()
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

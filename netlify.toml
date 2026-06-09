@@ -12,7 +12,7 @@
 
 [[redirects]]
   from = "/api/revise-plan"
-  to = "https://skinmate-ai-production.up.railway.app/revise-plan"
+  to = "/.netlify/functions/revise-plan"
   status = 200
 
 [[redirects]]

@@ -4,6 +4,10 @@ import sys
 from pathlib import Path
 from typing import BinaryIO
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from skincare_video_analyzer import (
     DEFAULT_CDP_PROXY_URL,
     DEFAULT_MODEL,

@@ -1,3 +1,5 @@
+import { resolveReviseEndpoint } from './apiEndpoints';
+
 function formatApiError(data, status) {
   const detail = data?.detail;
   if (typeof detail === 'string' && detail.trim()) return detail;
@@ -6,11 +8,6 @@ function formatApiError(data, status) {
   }
   if (data?.error) return String(data.error);
   return `方案调整失败（HTTP ${status || '未知'}），请稍后重试`;
-}
-
-function resolveReviseEndpoint() {
-  const apiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
-  return apiBase ? `${apiBase}/revise-plan` : '/api/revise-plan';
 }
 
 function normalizeStep(step, index) {
@@ -37,7 +34,7 @@ function normalizeStep(step, index) {
 }
 
 export async function revisePlan({ plan, instruction, chatHistory = [], planMeta = null }) {
-  const endpoint = resolveReviseEndpoint();
+  const endpoint = resolveReviseEndpoint(import.meta.env.VITE_API_BASE || '', import.meta.env.PROD);
   let response;
 
   try {
